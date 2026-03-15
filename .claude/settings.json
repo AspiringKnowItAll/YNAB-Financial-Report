@@ -1,7 +1,10 @@
 {
   "permissions": {
     "allow": [
-      "Read(//c/Users/Andrew Lucas/.claude/projects/c--Users-Andrew-Lucas-Documents-GitHub-YNAB-Financial-Report/memory/**)"
+      "Read(//c/Users/Andrew Lucas/.claude/projects/c--Users-Andrew-Lucas-Documents-GitHub-YNAB-Financial-Report/memory/**)",
+      "Bash(find 'c:\\\\Users\\\\Andrew Lucas\\\\Documents\\\\GitHub\\\\YNAB-Financial-Report\\\\tests' -type f -name *.py)",
+      "Bash(pip install:*)",
+      "Bash(python -m pytest tests/unit/ -v)"
     ],
     "additionalDirectories": [
       "c:\\Users\\Andrew Lucas\\.claude\\projects\\c--Users-Andrew-Lucas-Documents-GitHub-YNAB-Financial-Report\\memory"
