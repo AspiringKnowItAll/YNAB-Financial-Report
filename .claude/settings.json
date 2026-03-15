@@ -4,7 +4,10 @@
       "Read(//c/Users/Andrew Lucas/.claude/projects/c--Users-Andrew-Lucas-Documents-GitHub-YNAB-Financial-Report/memory/**)",
       "Bash(find 'c:\\\\Users\\\\Andrew Lucas\\\\Documents\\\\GitHub\\\\YNAB-Financial-Report\\\\tests' -type f -name *.py)",
       "Bash(pip install:*)",
-      "Bash(python -m pytest tests/unit/ -v)"
+      "Bash(python -m pytest tests/unit/ -v)",
+      "Bash(python -m pytest tests/unit/test_schemas.py -v)",
+      "Bash(python -m pytest tests/unit/test_schemas.py -v --tb=short)",
+      "Bash(python -m pytest tests/ -v --tb=short)"
     ],
     "additionalDirectories": [
       "c:\\Users\\Andrew Lucas\\.claude\\projects\\c--Users-Andrew-Lucas-Documents-GitHub-YNAB-Financial-Report\\memory"
