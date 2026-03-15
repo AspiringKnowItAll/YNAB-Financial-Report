@@ -14,7 +14,6 @@ POST /setup   → Validate, save profile, set setup_complete=True, redirect to d
 
 from fastapi import APIRouter, Depends, Form, Request
 from fastapi.responses import HTMLResponse, RedirectResponse
-from fastapi.templating import Jinja2Templates
 from pydantic import ValidationError
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -23,8 +22,9 @@ from app.database import get_db
 from app.models.user_profile import UserProfile
 from app.schemas.setup import UserProfileUpdate
 
+from app.templates_config import templates
+
 router = APIRouter(tags=["setup"])
-templates = Jinja2Templates(directory="app/templates")
 
 
 async def _get_or_create_profile(db: AsyncSession) -> UserProfile:

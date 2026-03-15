@@ -177,8 +177,8 @@ async def test_ynab(request: Request, db: AsyncSession = Depends(get_db)):
     try:
         client = YnabClient(api_key)
         budgets_response = await client.get_budgets()
-        budget_names = [b.name for b in budgets_response.budgets]
-        return JSONResponse({"status": "success", "budgets": budget_names})
+        budgets = [{"id": b.id, "name": b.name} for b in budgets_response.budgets]
+        return JSONResponse({"status": "success", "budgets": budgets})
     except httpx.HTTPStatusError as exc:
         if exc.response.status_code == 401:
             return JSONResponse(

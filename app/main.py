@@ -4,7 +4,6 @@ from contextlib import asynccontextmanager
 from fastapi import FastAPI, Request
 from fastapi.responses import RedirectResponse
 from fastapi.staticfiles import StaticFiles
-from fastapi.templating import Jinja2Templates
 from sqlalchemy import select
 
 from app.database import AsyncSessionLocal, apply_migrations, create_all
@@ -49,18 +48,8 @@ app = FastAPI(
     redoc_url=None,
 )
 
-# Static files & templates (autoescape enabled for all HTML templates)
+# Static files
 app.mount("/static", StaticFiles(directory="app/static"), name="static")
-templates = Jinja2Templates(directory="app/templates")
-templates.env.autoescape = True  # XSS protection — auto-escape all template output
-
-# Register custom Jinja2 filter: milliunits → display dollars
-def milliunit_to_dollars(value: int) -> str:
-    """Convert YNAB milliunits (int) to a formatted dollar string."""
-    dollars = value / 1000
-    return f"${dollars:,.2f}"
-
-templates.env.filters["milliunit_to_dollars"] = milliunit_to_dollars
 
 
 # ---------------------------------------------------------------------------
@@ -103,7 +92,8 @@ async def auth_gate(request: Request, call_next):
         return RedirectResponse("/unlock", status_code=302)
 
     # Step 3: Have settings been completed?
-    if path != "/settings":
+    # API routes are exempt — they validate their own requirements and return JSON errors.
+    if path != "/settings" and not path.startswith("/api/"):
         try:
             from app.models.settings import AppSettings
             async with AsyncSessionLocal() as db:
@@ -115,7 +105,8 @@ async def auth_gate(request: Request, call_next):
             pass  # DB not yet available on very first startup — let through
 
     # Step 4: Has the user profile wizard been completed?
-    if path not in ("/settings", "/setup"):
+    # API routes are exempt — they validate their own requirements and return JSON errors.
+    if path not in ("/settings", "/setup") and not path.startswith("/api/"):
         try:
             from app.models.user_profile import UserProfile
             async with AsyncSessionLocal() as db:

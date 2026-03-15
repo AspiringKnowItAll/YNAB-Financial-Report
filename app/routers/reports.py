@@ -11,7 +11,6 @@ import bleach
 import markdown
 from fastapi import APIRouter, Depends, Request
 from fastapi.responses import HTMLResponse
-from fastapi.templating import Jinja2Templates
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -20,8 +19,9 @@ from app.models.budget import Budget
 from app.models.settings import AppSettings
 from app.services.report_service import get_report, list_reports
 
+from app.templates_config import templates
+
 router = APIRouter(tags=["reports"])
-templates = Jinja2Templates(directory="app/templates")
 
 # HTML tags and attributes allowed in AI-generated commentary
 _ALLOWED_TAGS = [

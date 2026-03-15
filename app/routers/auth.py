@@ -11,13 +11,12 @@ POST /recovery        → Use recovery code, unlock, redirect to new-password fl
 
 from fastapi import APIRouter, Depends, Form, Request
 from fastapi.responses import HTMLResponse, RedirectResponse
-from fastapi.templating import Jinja2Templates
 
 from app.schemas.auth import MasterPasswordCreate, MasterPasswordUnlock, RecoveryCodeSubmit
 from app.services import auth_service
+from app.templates_config import templates
 
 router = APIRouter(tags=["auth"])
-templates = Jinja2Templates(directory="app/templates")
 
 
 # ---------------------------------------------------------------------------

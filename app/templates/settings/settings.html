@@ -59,14 +59,24 @@
         </div>
       </div>
 
-      <div class="form-group">
-        <label for="ynab_budget_id">Budget ID</label>
-        <input type="text" id="ynab_budget_id" name="ynab_budget_id"
-               value="{{ settings.ynab_budget_id or '' }}" maxlength="64">
-        <div class="field-hint">
-          The UUID from your YNAB budget URL:
-          <code>https://app.ynab.com/<strong>&lt;budget-id&gt;</strong>/budget</code>
-        </div>
+      {# Hidden fields carry the selected budget ID and name in the form POST #}
+      <input type="hidden" id="ynab_budget_id" name="ynab_budget_id"
+             value="{{ settings.ynab_budget_id or '' }}">
+      <input type="hidden" id="ynab_budget_name" name="ynab_budget_name"
+             value="{{ settings.ynab_budget_name or '' }}">
+
+      {# Budget selector — hidden until a successful connection test populates it #}
+      <div class="form-group" id="budget-selector-group"
+           style="{% if not settings.ynab_budget_id %}display:none;{% endif %}">
+        <label for="budget-select">Budget</label>
+        <select id="budget-select">
+          {% if settings.ynab_budget_id %}
+          <option value="{{ settings.ynab_budget_id }}" selected>
+            {{ settings.ynab_budget_name or settings.ynab_budget_id }}
+          </option>
+          {% endif %}
+        </select>
+        <div class="field-hint">Test the connection above to refresh the budget list.</div>
       </div>
 
       <div style="display:flex; gap:0.75rem; flex-wrap:wrap; margin-top:0.5rem;">
@@ -74,7 +84,7 @@
                 style="background:var(--surface); border:1px solid var(--border); color:var(--text);
                        padding:0.55rem 1.1rem; border-radius:var(--radius); font-size:0.9rem;
                        font-weight:500; cursor:pointer;">
-          Test connection
+          Test connection &amp; load budgets
         </button>
         <button type="button" id="btn-sync-now"
                 style="background:var(--surface); border:1px solid var(--border); color:var(--text);
@@ -421,13 +431,57 @@
   document.getElementById('schedule_frequency').addEventListener('change', updateFrequencyFields);
 
   document.getElementById('btn-test-ynab').addEventListener('click', function() {
-    apiPost('/api/test/ynab', this, 'Testing\u2026', function(data) {
+    apiPost('/api/test/ynab', this, 'Loading\u2026', function(data) {
       if (data.status === 'success') {
-        setYnabStatus('Connected. Budgets found: ' + data.budgets.join(', '), 'var(--success)');
+        var currentId = document.getElementById('ynab_budget_id').value;
+        var select = document.getElementById('budget-select');
+        var group = document.getElementById('budget-selector-group');
+
+        // Rebuild dropdown options
+        select.innerHTML = '';
+        if (data.budgets.length > 1) {
+          var placeholder = document.createElement('option');
+          placeholder.value = '';
+          placeholder.textContent = '\u2014 select a budget \u2014';
+          select.appendChild(placeholder);
+        }
+        data.budgets.forEach(function(b) {
+          var opt = document.createElement('option');
+          opt.value = b.id;
+          opt.textContent = b.name;
+          if (b.id === currentId) opt.selected = true;
+          select.appendChild(opt);
+        });
+
+        // Auto-select if only one budget
+        if (data.budgets.length === 1) {
+          select.value = data.budgets[0].id;
+        }
+
+        // Sync hidden fields from whatever is now selected (works for 1 or many budgets)
+        var sel = select.options[select.selectedIndex];
+        if (sel && sel.value) {
+          document.getElementById('ynab_budget_id').value = sel.value;
+          document.getElementById('ynab_budget_name').value = sel.textContent.trim();
+        }
+
+        group.style.display = '';
+        setYnabStatus(
+          'Connected \u2014 ' + data.budgets.length + ' budget' +
+          (data.budgets.length === 1 ? '' : 's') + ' found.',
+          'var(--success)'
+        );
       } else {
         setYnabStatus('Error: ' + data.message, 'var(--danger)');
       }
     });
+  });
+
+  // Keep hidden fields in sync with dropdown selection
+  document.getElementById('budget-select').addEventListener('change', function() {
+    document.getElementById('ynab_budget_id').value = this.value;
+    var selected = this.options[this.selectedIndex];
+    document.getElementById('ynab_budget_name').value = selected ? selected.textContent : '';
   });
 
   document.getElementById('btn-sync-now').addEventListener('click', function() {

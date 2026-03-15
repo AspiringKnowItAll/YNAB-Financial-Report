@@ -33,6 +33,7 @@ async def apply_migrations() -> None:
         ("app_settings", "schedule_month",         "INTEGER"),
         ("app_settings", "schedule_report_target", "VARCHAR(16) NOT NULL DEFAULT 'previous_month'"),
         ("app_settings", "schedule_send_email",    "BOOLEAN NOT NULL DEFAULT 0"),
+        ("app_settings", "ynab_budget_name",       "VARCHAR(256)"),
     ]
     async with engine.begin() as conn:
         for table, col, definition in _new_columns:

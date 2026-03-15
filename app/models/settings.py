@@ -18,6 +18,7 @@ class AppSettings(Base):
     # YNAB
     ynab_api_key_enc: Mapped[bytes | None] = mapped_column(LargeBinary, nullable=True)
     ynab_budget_id: Mapped[str | None] = mapped_column(String(64), nullable=True)
+    ynab_budget_name: Mapped[str | None] = mapped_column(String(256), nullable=True)
 
     # AI provider
     ai_provider: Mapped[str | None] = mapped_column(String(32), nullable=True)

@@ -10,7 +10,6 @@ Secret fields are NEVER pre-populated with decrypted values in the form.
 
 from fastapi import APIRouter, Depends, Form, Request
 from fastapi.responses import HTMLResponse, RedirectResponse
-from fastapi.templating import Jinja2Templates
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -25,8 +24,9 @@ from app.schemas.settings import (
 )
 from app.services.encryption import decrypt, encrypt
 
+from app.templates_config import templates
+
 router = APIRouter(tags=["settings"])
-templates = Jinja2Templates(directory="app/templates")
 
 
 async def _get_or_create_settings(db: AsyncSession) -> AppSettings:
@@ -63,6 +63,7 @@ async def post_settings(
     # YNAB
     ynab_api_key: str = Form(default=""),
     ynab_budget_id: str = Form(default=""),
+    ynab_budget_name: str = Form(default=""),
     # AI
     ai_provider: str = Form(default=""),
     ai_model: str = Form(default=""),
@@ -95,16 +96,23 @@ async def post_settings(
     errors: list[str] = []
 
     # --- YNAB ---
-    if ynab_api_key.strip() or ynab_budget_id.strip():
+    # API key and budget are saved independently so that re-entering the key
+    # is not required when only selecting a different budget (and vice versa).
+    if ynab_api_key.strip():
         try:
             ynab = YnabSettingsUpdate(
                 ynab_api_key=ynab_api_key,
-                ynab_budget_id=ynab_budget_id,
+                ynab_budget_id=ynab_budget_id or "placeholder",
             )
             settings.ynab_api_key_enc = encrypt(ynab.ynab_api_key, master_key)
-            settings.ynab_budget_id = ynab.ynab_budget_id
         except Exception as exc:
             _collect_errors(exc, errors, "YNAB")
+
+    if ynab_budget_id.strip():
+        bid = ynab_budget_id.strip()[:64]
+        settings.ynab_budget_id = bid
+        if ynab_budget_name.strip():
+            settings.ynab_budget_name = ynab_budget_name.strip()[:256]
 
     # --- AI ---
     if ai_provider.strip():
@@ -185,16 +193,23 @@ async def post_settings(
         _collect_errors(exc, errors, "Scheduler")
 
     if errors:
+        # Snapshot the boolean flags before rollback expires the ORM object.
+        has_ynab_key = bool(settings.ynab_api_key_enc)
+        has_ai_key = bool(settings.ai_api_key_enc)
+        has_smtp_password = bool(settings.smtp_password_enc)
+        has_notion_token = bool(settings.notion_token_enc)
+        await db.rollback()
+        # Re-fetch settings so the template has a fully-loaded, non-expired object.
+        settings = await _get_or_create_settings(db)
         context = {
             "settings": settings,
-            "has_ynab_key": bool(settings.ynab_api_key_enc),
-            "has_ai_key": bool(settings.ai_api_key_enc),
-            "has_smtp_password": bool(settings.smtp_password_enc),
-            "has_notion_token": bool(settings.notion_token_enc),
+            "has_ynab_key": has_ynab_key,
+            "has_ai_key": has_ai_key,
+            "has_smtp_password": has_smtp_password,
+            "has_notion_token": has_notion_token,
             "errors": errors,
             "saved": False,
         }
-        await db.rollback()
         return templates.TemplateResponse(request, "settings/settings.html", context, status_code=422)
 
     # Mark settings complete if minimum required fields are present
