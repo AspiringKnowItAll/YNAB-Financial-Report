@@ -44,11 +44,10 @@ Your YNAB Personal Access Token. Generated at: YNAB → My Account → Developer
 
 The app uses this key read-only to fetch budget data, transactions, categories, and accounts. It cannot modify your budget.
 
-#### YNAB Budget ID
+#### YNAB Budget
 **Required.**
 
-The UUID of the YNAB budget to report on. Found in the URL when viewing your budget:
-`https://app.youneedabudget.com/{BUDGET-ID}/budget`
+The YNAB budget to report on. After entering your API key, click **"Test connection"** — the app will connect to YNAB and populate a dropdown with your available budgets. Select the one you want to use. The budget ID is stored automatically.
 
 ---
 
@@ -88,7 +87,7 @@ The base URL for the API endpoint.
 #### AI Model
 **Required.**
 
-The model name to use for AI analysis. Must be a model available to your chosen provider and API key.
+The model name to use for AI analysis. After configuring the provider, API key, and base URL (if applicable), click **"Test connection"** — the app will query the provider for available models and populate a searchable dropdown. You can select from the list or type any model name manually.
 
 | Provider | Example models |
 |---|---|
@@ -101,7 +100,7 @@ The model name to use for AI analysis. Must be a model available to your chosen 
 
 ### Email Settings (Optional)
 
-Email settings are optional. When configured, the app can send you reports and notifications via your own SMTP server.
+Email is optional. When configured, the app can send you reports via your own SMTP server — either automatically on a schedule or on demand from the report detail page.
 
 #### SMTP Host
 Hostname of your mail server.

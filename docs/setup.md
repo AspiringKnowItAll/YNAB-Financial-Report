@@ -8,17 +8,16 @@ This guide walks through a complete installation of YNAB Financial Report from s
 
 1. [Prerequisites](#1-prerequisites)
 2. [Get Your YNAB Personal Access Token](#2-get-your-ynab-personal-access-token)
-3. [Find Your YNAB Budget ID](#3-find-your-ynab-budget-id)
-4. [Get an AI Provider API Key](#4-get-an-ai-provider-api-key)
-5. [Install and Start the App](#5-install-and-start-the-app)
-6. [Create Your Master Password](#6-create-your-master-password)
-7. [Save Your Recovery Codes](#7-save-your-recovery-codes)
-8. [Complete the Settings Page](#8-complete-the-settings-page)
-9. [Complete the Personal Profile Wizard](#9-complete-the-personal-profile-wizard)
-10. [Run Your First Sync](#10-run-your-first-sync)
-11. [Optional: Email Setup](#11-optional-email-setup)
-12. [Optional: Notion Sync](#12-optional-notion-sync)
-13. [Keeping Your Data Safe](#13-keeping-your-data-safe)
+3. [Get an AI Provider API Key](#3-get-an-ai-provider-api-key)
+4. [Install and Start the App](#4-install-and-start-the-app)
+5. [Create Your Master Password](#5-create-your-master-password)
+6. [Save Your Recovery Codes](#6-save-your-recovery-codes)
+7. [Complete the Settings Page](#7-complete-the-settings-page)
+8. [Complete the Personal Profile Wizard](#8-complete-the-personal-profile-wizard)
+9. [Run Your First Sync](#9-run-your-first-sync)
+10. [Optional: Email Setup](#10-optional-email-setup)
+11. [Optional: Notion Sync](#11-optional-notion-sync)
+12. [Keeping Your Data Safe](#12-keeping-your-data-safe)
 
 ---
 
@@ -67,21 +66,7 @@ A Personal Access Token lets the app read your YNAB data. It is read-only by def
 
 ---
 
-## 3. Find Your YNAB Budget ID
-
-The Budget ID tells the app which of your YNAB budgets to use.
-
-1. Log in to [app.youneedabudget.com](https://app.youneedabudget.com)
-2. Open the budget you want to use
-3. Look at the URL in your browser. It will look like:
-   ```
-   https://app.youneedabudget.com/XXXXXXXX-XXXX-XXXX-XXXX-XXXXXXXXXXXX/budget
-   ```
-4. The long string of letters and numbers between the slashes is your Budget ID. Copy it.
-
----
-
-## 4. Get an AI Provider API Key
+## 3. Get an AI Provider API Key
 
 The app uses an AI model to write financial analysis and recommendations. You need an account with at least one of the following providers:
 
@@ -117,7 +102,7 @@ If you have Ollama running locally, you can use it for fully offline AI analysis
 
 ---
 
-## 5. Install and Start the App
+## 4. Install and Start the App
 
 Open a terminal and run the following commands:
 
@@ -138,7 +123,7 @@ You will be taken to the Master Password setup page. If you see an error instead
 
 ---
 
-## 6. Create Your Master Password
+## 5. Create Your Master Password
 
 On first launch, the app will ask you to create a **Master Password**. This is the most important step in the setup process.
 
@@ -158,7 +143,7 @@ Enter your chosen password, confirm it, and click **"Create Master Password"**.
 
 ---
 
-## 7. Save Your Recovery Codes
+## 6. Save Your Recovery Codes
 
 After creating your master password, the app will display **8 recovery codes**. These are one-time-use backup codes that can fully restore access to the app — including all your stored API keys — if you ever forget your master password.
 
@@ -180,33 +165,33 @@ Click **"I have saved my recovery codes"** to continue to the Settings page.
 
 ---
 
-## 8. Complete the Settings Page
+## 7. Complete the Settings Page
 
-The Settings page is where you enter your API keys and configure the app. Fill in:
+The Settings page is where you enter your API keys and configure the app. Required fields are marked with a red asterisk (*).
 
 **YNAB (required)**
-- **YNAB API Key** — the token you generated in step 2
-- **Budget ID** — the ID you found in step 3
-- Click **"Test Connection"** to verify everything works
+1. Paste the **YNAB API Key** you generated in step 2
+2. Click **"Test connection"** — the app will verify your key and load your available budgets
+3. Select your **budget** from the dropdown that appears
 
 **AI Provider (required)**
-- Select your provider from the dropdown
-- Enter your API key (not required for Ollama)
-- Enter the model name
-- For OpenRouter or Ollama, enter the base URL
-- Click **"Test Connection"** to verify
+1. Select your **provider** from the dropdown
+2. Enter your **API key** (not required for Ollama)
+3. For OpenRouter or Ollama, enter the **base URL**
+4. Click **"Test connection"** — the app will verify connectivity and load available models
+5. Select or type a **model name** in the searchable dropdown that appears
 
 **Email (optional)**
-- See [Optional: Email Setup](#11-optional-email-setup)
+- See [Optional: Email Setup](#10-optional-email-setup)
 
 **Notion (optional)**
-- See [Optional: Notion Sync](#12-optional-notion-sync)
+- See [Optional: Notion Sync](#11-optional-notion-sync)
 
-Click **"Save Settings"** when done. You will be redirected to the personal profile wizard.
+Click **"Save Settings"** when done. If any required fields are missing, the page will show a warning listing exactly what still needs to be filled in. Once all required fields are set, you will be redirected to the personal profile wizard.
 
 ---
 
-## 9. Complete the Personal Profile Wizard
+## 8. Complete the Personal Profile Wizard
 
 The wizard collects context about your living situation so the AI can give you more relevant recommendations. You will be asked:
 
@@ -220,7 +205,7 @@ Your answers are stored locally in your database and used only to personalize th
 
 ---
 
-## 10. Run Your First Sync
+## 9. Run Your First Sync
 
 After completing the wizard, you will be on the dashboard. Since no data has been synced yet, the dashboard will be empty.
 
@@ -234,7 +219,7 @@ The app will automatically sync and generate a new report on the day of the mont
 
 ---
 
-## 11. Optional: Email Setup
+## 10. Optional: Email Setup
 
 If you want the app to email you reports, you need an SMTP server. You can use:
 
@@ -242,7 +227,7 @@ If you want the app to email you reports, you need an SMTP server. You can use:
 - **Outlook/Hotmail:** Use `smtp-mail.outlook.com` port `587` with TLS enabled
 - **Your own mail server:** Enter your server's SMTP details directly
 
-In the Settings page, under **"Email"**:
+In the Settings page, under **"Email Settings"**:
 
 | Field | Description |
 |---|---|
@@ -254,11 +239,11 @@ In the Settings page, under **"Email"**:
 | To Address | Where to send the reports (can be the same as From) |
 | Use TLS | Recommended: leave enabled |
 
-Click **"Send Test Email"** to verify the configuration works before saving.
+Click **"Test connection"** to verify the SMTP configuration works before saving.
 
 ---
 
-## 12. Optional: Notion Sync
+## 11. Optional: Notion Sync
 
 If you use Notion and want report summaries automatically posted there:
 
@@ -276,7 +261,7 @@ In the Settings page, under **"Notion"**:
 
 ---
 
-## 13. Keeping Your Data Safe
+## 12. Keeping Your Data Safe
 
 ### Unlocking the app after a restart
 Each time the Docker container restarts, the app will show the **Unlock** screen. Enter your master password to resume access. Your data is never lost on restart — only the in-memory key is cleared.

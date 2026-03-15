@@ -277,6 +277,7 @@ All AI functionality goes through the `AIProvider` protocol defined in `services
 class AIProvider(Protocol):
     async def generate(self, system: str, user: str, max_tokens: int) -> str: ...
     async def health_check(self) -> bool: ...
+    async def list_models(self) -> list[str]: ...
 ```
 
 Supported providers and their `ai_provider` setting values:
@@ -329,22 +330,35 @@ Outlier exclusions must be stored in `report_snapshots.outliers_excluded` (JSON 
 
 These bugs and UX gaps were discovered during the first real end-to-end run of the app and are actively being addressed:
 
-### Bugs Fixed This Session
+### Bugs Fixed This Phase
 - **Dockerfile**: `libgdk-pixbuf2.0-0` renamed to `libgdk-pixbuf-xlib-2.0-0` in Debian Trixie (python:3.12-slim base image)
 - **Dockerfile**: Internal container port was driven by `$PORT`, causing a mismatch with docker-compose port mapping. Internal port is now hardcoded to `8080`; `PORT` env var only controls the host-side mapping.
 - **docker-compose.yml**: `env_file` now marked `required: false` so the app starts without a `.env` file
 - **Middleware**: `/api/*` routes were being redirected to `/settings` or `/setup` with HTML 302s instead of passing through to return JSON errors. API routes are now exempt from Steps 3 and 4 of the auth gate.
-- **Settings page**: Budget ID was a manual text input requiring the user to copy a UUID from the YNAB URL. Replaced with a dynamic dropdown populated by clicking "Test connection & load budgets". Budget name is stored in `app_settings.ynab_budget_name` (new column, migration included).
+- **Settings page**: Budget ID was a manual text input requiring the user to copy a UUID from the YNAB URL. Replaced with a dynamic dropdown populated by clicking "Test connection". Budget name is stored in `app_settings.ynab_budget_name` (new column, migration included).
 - **Settings router**: Saving settings failed when the YNAB API key field was blank (user not re-entering existing key) because the Pydantic schema required it. API key and budget ID/name are now saved independently.
 - **Settings router**: `MissingGreenlet` error after a form validation failure — ORM object was expired after `db.rollback()` and lazily loaded in a sync Jinja2 context. Fixed by re-fetching settings after rollback.
 - **Jinja2 filter**: `milliunit_to_dollars` filter was registered only on the `main.py` templates instance, not on the per-router instances. Introduced `app/templates_config.py` as a single shared `Jinja2Templates` instance with all filters registered. All routers now import from it instead of creating their own instances.
 - **Budget name not persisting**: For accounts with multiple budgets, the JS `change` event on the budget dropdown was not fired on programmatic selection, so the `ynab_budget_name` hidden field was never populated. Fixed by syncing hidden fields from the current selection after rebuilding the dropdown.
+- **Settings page — missing requirements**: No indication that AI provider/model were required. User could save settings without them and get silently looped back. Fixed with: red asterisks on required fields, red-on-blur validation for empty required fields, and a warning banner listing missing requirements shown only after saving incomplete settings.
+- **Settings page — AI model selector**: Model name was a free-text field with no guidance. Replaced with a combobox (type-to-filter dropdown) that populates available models from the provider when "Test connection" is clicked. Users can still type any model name manually.
+- **Settings page — AI test connectivity**: Test button read from DB, requiring a save before testing. Now reads provider/key/base URL directly from the form fields. Falls back to the saved encrypted API key if the field is blank.
 
-### New Files
+### Settings Page UX Improvements
+- **Layout reorder**: YNAB section: token → test button → budget dropdown. AI section: provider → key → base URL → test button → model combobox.
+- **Consistent test buttons**: All test buttons now say "Test connection" consistently. YNAB sync button removed from settings (lives on dashboard).
+- **Secret field indicators**: Replaced "Current value: ●●●●●●●●" badges with subtle green "✓ Key configured." hints.
+- **Email section**: Renamed "Email Delivery" → "Email Settings (optional)" with checkbox text "Enable email" and a description line.
+- **Custom dropdown styling**: All `<select>` elements and the model combobox use a consistent custom SVG chevron arrow. Native browser arrows suppressed via `appearance: none`.
+
+### New/Changed Files
 - `app/templates_config.py` — Shared Jinja2Templates instance with `milliunit_to_dollars` filter and autoescape enabled. All routers must import from here.
 
+### AI Provider Protocol Change
+- `list_models() -> list[str]` added to `AIProvider` protocol and both implementations (`AnthropicProvider`, `OpenAIProvider`). Returns available model IDs sorted alphabetically. Used by the settings page test button.
+- `get_ai_provider_from_params(provider_name, api_key, base_url)` factory added to `ai_service.py`. Builds an `AIProvider` from plaintext form values without requiring a DB record or encryption. Used by `/api/test/ai`.
+
 ### Known Issues Still To Address
-- **Settings page**: No indication that an AI provider is required before the app will let you proceed past settings. User can save settings without an AI provider and the wizard silently loops.
 - **First-run form**: Logs show a `422 Unprocessable Entity` on the first master password POST attempt — likely a form validation issue worth investigating.
 - **Dashboard**: First real-world view — visual and functional review needed.
 
