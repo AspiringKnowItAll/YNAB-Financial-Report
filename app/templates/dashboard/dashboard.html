@@ -1,0 +1,403 @@
+{% extends "base.html" %}
+
+{% block title %}Dashboard — {{ budget_name }}{% endblock %}
+
+{% block extra_head %}
+<style>
+  /* ── Layout ─────────────────────────────────────────── */
+  .page-body {
+    max-width: 1100px;
+    margin: 0 auto;
+    padding: 1.5rem;
+  }
+
+  .page-header {
+    display: flex;
+    align-items: baseline;
+    justify-content: space-between;
+    flex-wrap: wrap;
+    gap: 0.75rem;
+    margin-bottom: 1.5rem;
+  }
+
+  .page-header__title {
+    font-size: 1.3rem;
+    font-weight: 700;
+    color: var(--text);
+  }
+
+  .page-header__sub {
+    color: var(--muted);
+    font-size: 0.85rem;
+    margin-left: 0.5rem;
+  }
+
+  /* ── Summary cards ───────────────────────────────────── */
+  .summary-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
+    gap: 1rem;
+    margin-bottom: 1.5rem;
+  }
+
+  .summary-card {
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: var(--radius);
+    padding: 1.1rem 1.25rem;
+  }
+
+  .summary-card__label {
+    font-size: 0.75rem;
+    font-weight: 700;
+    text-transform: uppercase;
+    letter-spacing: 0.05em;
+    color: var(--muted);
+    margin-bottom: 0.4rem;
+  }
+
+  .summary-card__value {
+    font-size: 1.55rem;
+    font-weight: 700;
+    line-height: 1.1;
+  }
+
+  .summary-card__value--income   { color: var(--success); }
+  .summary-card__value--spending { color: var(--danger); }
+  .summary-card__value--net-pos  { color: var(--success); }
+  .summary-card__value--net-neg  { color: var(--danger); }
+  .summary-card__value--neutral  { color: var(--text); }
+
+  /* ── Chart panels ────────────────────────────────────── */
+  .chart-panel {
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: var(--radius);
+    padding: 1.25rem;
+    margin-bottom: 1.5rem;
+  }
+
+  .chart-panel__title {
+    font-size: 0.85rem;
+    font-weight: 700;
+    text-transform: uppercase;
+    letter-spacing: 0.05em;
+    color: var(--muted);
+    margin-bottom: 1rem;
+  }
+
+  /* ── Category table ──────────────────────────────────── */
+  .data-table {
+    width: 100%;
+    border-collapse: collapse;
+    font-size: 0.9rem;
+  }
+
+  .data-table th {
+    text-align: left;
+    font-size: 0.75rem;
+    font-weight: 700;
+    text-transform: uppercase;
+    letter-spacing: 0.05em;
+    color: var(--muted);
+    padding: 0.5rem 0.75rem;
+    border-bottom: 1px solid var(--border);
+  }
+
+  .data-table th.right,
+  .data-table td.right { text-align: right; }
+
+  .data-table td {
+    padding: 0.5rem 0.75rem;
+    border-bottom: 1px solid rgba(46,49,71,0.5);
+    vertical-align: middle;
+  }
+
+  .data-table tr:last-child td { border-bottom: none; }
+  .data-table tr:hover td { background: rgba(108,143,255,0.04); }
+
+  .group-badge {
+    display: inline-block;
+    font-size: 0.72rem;
+    color: var(--muted);
+    background: rgba(46,49,71,0.8);
+    border-radius: 4px;
+    padding: 0.1rem 0.4rem;
+    margin-left: 0.4rem;
+    vertical-align: middle;
+  }
+
+  .vs-avg           { font-size: 0.8rem; font-weight: 600; }
+  .vs-avg--over     { color: var(--danger); }
+  .vs-avg--under    { color: var(--success); }
+  .vs-avg--same     { color: var(--muted); }
+
+  /* ── Sync status bar ─────────────────────────────────── */
+  .sync-bar {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    flex-wrap: wrap;
+    gap: 0.75rem;
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: var(--radius);
+    padding: 0.85rem 1.25rem;
+    margin-bottom: 1.5rem;
+    font-size: 0.875rem;
+  }
+
+  .sync-bar__info { color: var(--muted); }
+  .sync-bar__info strong { color: var(--text); }
+
+  .sync-dot {
+    display: inline-block;
+    width: 8px;
+    height: 8px;
+    border-radius: 50%;
+    margin-right: 0.4rem;
+    vertical-align: middle;
+  }
+  .sync-dot--success { background: var(--success); }
+  .sync-dot--failed  { background: var(--danger); }
+  .sync-dot--running { background: var(--warning); }
+  .sync-dot--none    { background: var(--muted); }
+
+  /* ── Empty state ─────────────────────────────────────── */
+  .empty-state {
+    text-align: center;
+    padding: 3rem 1.5rem;
+  }
+
+  .empty-state__icon {
+    font-size: 2.5rem;
+    margin-bottom: 1rem;
+    opacity: 0.3;
+    color: var(--muted);
+  }
+
+  .empty-state__title {
+    font-size: 1.1rem;
+    font-weight: 600;
+    color: var(--text);
+    margin-bottom: 0.5rem;
+  }
+
+  .empty-state__body {
+    font-size: 0.9rem;
+    color: var(--muted);
+    max-width: 360px;
+    margin: 0 auto;
+  }
+
+  /* ── Outlier note ────────────────────────────────────── */
+  .outlier-note {
+    font-size: 0.8rem;
+    color: var(--muted);
+    margin-top: 0.75rem;
+    border-top: 1px solid var(--border);
+    padding-top: 0.6rem;
+  }
+</style>
+{% endblock %}
+
+{% block nav %}
+<nav class="navbar">
+  <span class="navbar__brand">YNAB Financial Report</span>
+  <div class="navbar__links">
+    <a href="/">Dashboard</a>
+    <a href="/reports">Reports</a>
+    <a href="/settings">Settings</a>
+    <a href="/setup">Profile</a>
+  </div>
+</nav>
+{% endblock %}
+
+{% block content %}
+<div class="page-body">
+
+  {# ── Page header ──────────────────────────────────────────── #}
+  <div class="page-header">
+    <div>
+      <span class="page-header__title">{{ budget_name }}</span>
+      <span class="page-header__sub">{{ current_month }}</span>
+    </div>
+  </div>
+
+  {# ── Sync status bar ──────────────────────────────────────── #}
+  <div class="sync-bar">
+    <div class="sync-bar__info">
+      {% if last_sync %}
+        {% if last_sync.status == "success" %}
+          <span class="sync-dot sync-dot--success"></span>
+          Last sync
+          <strong>{{ last_sync.finished_at[:10] if last_sync.finished_at else last_sync.started_at[:10] }}</strong>
+          &mdash; {{ last_sync.transactions_added }} added,
+          {{ last_sync.transactions_updated }} updated
+        {% elif last_sync.status == "failed" %}
+          <span class="sync-dot sync-dot--failed"></span>
+          Last sync <strong>failed</strong> on {{ last_sync.started_at[:10] }}
+          {% if last_sync.error_message %}&mdash; {{ last_sync.error_message }}{% endif %}
+        {% else %}
+          <span class="sync-dot sync-dot--running"></span>
+          Sync <strong>in progress</strong>&hellip;
+        {% endif %}
+      {% else %}
+        <span class="sync-dot sync-dot--none"></span>
+        No sync has been run yet.
+      {% endif %}
+    </div>
+    <form method="post" action="/api/sync/trigger">
+      <button type="submit" class="btn btn--primary"
+              style="padding: 0.45rem 1rem; font-size: 0.85rem;">
+        Sync Now
+      </button>
+    </form>
+  </div>
+
+  {% if not has_data %}
+  {# ── Empty state ──────────────────────────────────────────── #}
+  <div class="chart-panel">
+    <div class="empty-state">
+      <div class="empty-state__icon">&#9685;</div>
+      <div class="empty-state__title">No financial data yet</div>
+      <div class="empty-state__body">
+        Trigger a sync above to pull your YNAB transactions into the app.
+        Charts and summaries will appear here once data is available.
+      </div>
+    </div>
+  </div>
+
+  {% else %}
+
+  {# ── Summary cards ────────────────────────────────────────── #}
+  <div class="summary-grid">
+    <div class="summary-card">
+      <div class="summary-card__label">Net Worth</div>
+      <div class="summary-card__value summary-card__value--neutral">
+        {{ net_worth | milliunit_to_dollars }}
+      </div>
+    </div>
+    <div class="summary-card">
+      <div class="summary-card__label">Income &mdash; {{ current_month }}</div>
+      <div class="summary-card__value summary-card__value--income">
+        {{ income_this_month | milliunit_to_dollars }}
+      </div>
+    </div>
+    <div class="summary-card">
+      <div class="summary-card__label">Spending &mdash; {{ current_month }}</div>
+      <div class="summary-card__value summary-card__value--spending">
+        {{ spending_this_month | milliunit_to_dollars }}
+      </div>
+    </div>
+    <div class="summary-card">
+      <div class="summary-card__label">Net &mdash; {{ current_month }}</div>
+      <div class="summary-card__value
+        {%- if net_this_month >= 0 %} summary-card__value--net-pos
+        {%- else %} summary-card__value--net-neg{%- endif %}">
+        {{ net_this_month | milliunit_to_dollars }}
+      </div>
+    </div>
+  </div>
+
+  {# ── 12-month trend chart ─────────────────────────────────── #}
+  {% if trend_chart_json %}
+  <div class="chart-panel">
+    <div class="chart-panel__title">Income vs Spending &mdash; Last 12 Months</div>
+    <div id="trend-chart"></div>
+  </div>
+  {% endif %}
+
+  {# ── Category breakdown ───────────────────────────────────── #}
+  {% if cat_spend %}
+  <div class="chart-panel">
+    <div class="chart-panel__title">Spending by Category &mdash; {{ current_month }}</div>
+
+    {% if category_chart_json %}
+    <div id="category-chart" style="margin-bottom: 1.5rem;"></div>
+    {% endif %}
+
+    <table class="data-table">
+      <thead>
+        <tr>
+          <th>Category</th>
+          <th class="right">This Month</th>
+          <th class="right">Avg / Month*</th>
+          <th class="right">vs Avg</th>
+        </tr>
+      </thead>
+      <tbody>
+        {% for cs in cat_spend %}
+        <tr>
+          <td>
+            {{ cs.category_name }}
+            <span class="group-badge">{{ cs.group_name }}</span>
+          </td>
+          <td class="right">{{ cs.amount | milliunit_to_dollars }}</td>
+          <td class="right">
+            {% if cs.average_amount %}
+              {{ cs.average_amount | milliunit_to_dollars }}
+              {% if cs.outlier_months_excluded %}
+                <span style="color: var(--muted); font-size: 0.75rem;"
+                      title="{{ cs.outlier_months_excluded }} outlier month(s) excluded">&#8224;</span>
+              {% endif %}
+            {% else %}
+              <span style="color: var(--muted);">—</span>
+            {% endif %}
+          </td>
+          <td class="right">
+            {% if cs.average_amount %}
+              {% set diff = cs.amount - cs.average_amount %}
+              {% if diff > 500 %}
+                <span class="vs-avg vs-avg--over">+{{ diff | milliunit_to_dollars }}</span>
+              {% elif diff < -500 %}
+                <span class="vs-avg vs-avg--under">{{ diff | milliunit_to_dollars }}</span>
+              {% else %}
+                <span class="vs-avg vs-avg--same">~avg</span>
+              {% endif %}
+            {% else %}
+              <span style="color: var(--muted);">—</span>
+            {% endif %}
+          </td>
+        </tr>
+        {% endfor %}
+      </tbody>
+    </table>
+
+    <div class="outlier-note">
+      * Averages calculated from all months with data.
+      {% if total_outlier_months_excluded > 0 %}
+      &dagger; Months with unusually high spending (Tukey IQR fence) were excluded
+      from that category&rsquo;s average.
+      {% endif %}
+    </div>
+  </div>
+  {% endif %}
+
+  {% endif %}{# end has_data #}
+
+</div>{# end page-body #}
+
+{# ── Plotly — rendered after DOM is ready ───────────────────── #}
+{% if trend_chart_json or category_chart_json %}
+<script src="https://cdn.plot.ly/plotly-2.35.2.min.js" charset="utf-8"></script>
+<script>
+  {% if trend_chart_json %}
+  (function () {
+    var spec = {{ trend_chart_json | safe }};
+    Plotly.newPlot('trend-chart', spec.data, spec.layout, {
+      responsive: true, displayModeBar: false
+    });
+  })();
+  {% endif %}
+  {% if category_chart_json %}
+  (function () {
+    var spec = {{ category_chart_json | safe }};
+    Plotly.newPlot('category-chart', spec.data, spec.layout, {
+      responsive: true, displayModeBar: false
+    });
+  })();
+  {% endif %}
+</script>
+{% endif %}
+{% endblock %}

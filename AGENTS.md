@@ -315,7 +315,7 @@ Outlier exclusions must be stored in `report_snapshots.outliers_excluded` (JSON 
 | 2 — Auth + Settings UI | Complete | Master password setup, unlock, recovery codes, Settings page, encryption, middleware |
 | 3 — YNAB Sync | Complete | YNAB API client, sync pipeline, /api/sync/trigger, /api/test/ynab |
 | 4 — Profile Wizard | Complete | Personal context wizard (household size, income type, goals, housing, notes) |
-| 5 — Dashboard | Pending | Charts, analysis |
+| 5 — Dashboard | Complete | 12-month trend chart, category breakdown with IQR-adjusted averages, sync status bar, net worth |
 | 6 — AI Reports | Pending | AI provider abstraction, report snapshots |
 | 7 — Export | Pending | PDF/HTML export |
 | 8 — Email | Pending | SMTP delivery |
@@ -331,6 +331,7 @@ Do not implement these until v1 is complete and they are explicitly requested:
 - Conversational AI chat interface (ask questions about finances in real-time)
 - Per-month user annotations on reports
 - Mobile-optimized layout
+- Per-category outlier threshold configuration (user-defined IQR multiplier or fixed dollar threshold per category; currently the global Tukey 1.5×IQR fence is applied uniformly)
 
 ---
 
