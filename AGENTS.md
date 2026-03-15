@@ -168,7 +168,7 @@ YNAB-Financial-Report/
 │   ├── main.py                   # App factory, lifespan, routers, middleware, app.state.master_key
 │   ├── config.py                 # pydantic-settings: PORT, SYNC_DAY_OF_MONTH (no secrets)
 │   ├── database.py               # Async engine, session factory, create_all
-│   ├── scheduler.py              # APScheduler monthly CronTrigger
+│   ├── scheduler.py              # APScheduler; configurable CronTrigger; auto sync→report→email pipeline
 │   ├── models/
 │   │   ├── settings.py           # AppSettings ORM (encrypted secrets)
 │   │   ├── user_profile.py       # UserProfile ORM (wizard answers)
@@ -319,7 +319,7 @@ Outlier exclusions must be stored in `report_snapshots.outliers_excluded` (JSON 
 | 6 — AI Reports | Complete | AI provider abstraction (Anthropic/OpenAI/OpenRouter/Ollama), report snapshots, /reports list + detail, /api/report/generate, /api/test/ai |
 | 7 — Export | Complete | PDF/HTML export via WeasyPrint; standalone HTML with interactive Plotly charts |
 | 8 — Email | Complete | SMTP delivery via aiosmtplib; email_service.py, /api/report/email/{id}, /api/test/smtp, Email Report button on report detail |
-| 9 — Scheduler + Notion | Pending | Automated runs, Notion sync |
+| 9 — Scheduler | Complete | Configurable automated schedule (daily/weekly/biweekly/monthly/yearly); auto sync → report → email; previous or current month target; locked-app skip with error log; DB migration for new columns |
 | 10 — Tests + Hardening | Pending | Test suite, error handling, full docs |
 
 ---
@@ -328,6 +328,8 @@ Outlier exclusions must be stored in `report_snapshots.outliers_excluded` (JSON 
 
 Do not implement these until v1 is complete and they are explicitly requested:
 
+- **Notion sync** — `notion_service.py` stub exists; integration deferred until v1 is otherwise complete
+- **Rolling report windows** — "last 30 days" or arbitrary date-range reports; requires pipeline redesign (currently month-based YYYY-MM only)
 - Conversational AI chat interface (ask questions about finances in real-time)
 - Per-month user annotations on reports
 - Mobile-optimized layout

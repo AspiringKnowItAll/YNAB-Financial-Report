@@ -19,6 +19,7 @@ from app.models.settings import AppSettings
 from app.schemas.settings import (
     AiSettingsUpdate,
     NotionSettingsUpdate,
+    ScheduleSettingsUpdate,
     SmtpSettingsUpdate,
     YnabSettingsUpdate,
 )
@@ -81,6 +82,14 @@ async def post_settings(
     notion_enabled: str = Form(default=""),
     notion_token: str = Form(default=""),
     notion_database_id: str = Form(default=""),
+    # Scheduler
+    schedule_enabled: str = Form(default=""),
+    schedule_frequency: str = Form(default=""),
+    schedule_day_of_month: str = Form(default=""),
+    schedule_day_of_week: str = Form(default=""),
+    schedule_month: str = Form(default=""),
+    schedule_report_target: str = Form(default="previous_month"),
+    schedule_send_email: str = Form(default=""),
 ):
     master_key = request.app.state.master_key
     settings = await _get_or_create_settings(db)
@@ -155,6 +164,27 @@ async def post_settings(
         except Exception as exc:
             _collect_errors(exc, errors, "Notion")
 
+    # --- Scheduler ---
+    try:
+        sched = ScheduleSettingsUpdate(
+            schedule_enabled=bool(schedule_enabled),
+            schedule_frequency=schedule_frequency or None,
+            schedule_day_of_month=int(schedule_day_of_month) if schedule_day_of_month.strip() else None,
+            schedule_day_of_week=schedule_day_of_week or None,
+            schedule_month=int(schedule_month) if schedule_month.strip() else None,
+            schedule_report_target=schedule_report_target or "previous_month",
+            schedule_send_email=bool(schedule_send_email),
+        )
+        settings.schedule_enabled = sched.schedule_enabled
+        settings.schedule_frequency = sched.schedule_frequency
+        settings.schedule_day_of_month = sched.schedule_day_of_month
+        settings.schedule_day_of_week = sched.schedule_day_of_week
+        settings.schedule_month = sched.schedule_month
+        settings.schedule_report_target = sched.schedule_report_target
+        settings.schedule_send_email = sched.schedule_send_email
+    except Exception as exc:
+        _collect_errors(exc, errors, "Scheduler")
+
     if errors:
         context = {
             "request": request,
@@ -174,6 +204,11 @@ async def post_settings(
         settings.settings_complete = True
 
     await db.commit()
+
+    # Apply schedule changes immediately (no restart required)
+    from app.scheduler import reschedule_job
+    reschedule_job(settings, request.app)
+
     return RedirectResponse("/settings?saved=1", status_code=302)
 
 

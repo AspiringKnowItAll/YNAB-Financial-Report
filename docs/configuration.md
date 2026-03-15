@@ -2,8 +2,8 @@
 
 YNAB Financial Report uses a two-tier configuration system:
 
-1. **`.env` file** — Fully optional. Only needed to change the default port or sync schedule. Contains no secrets.
-2. **Settings UI** — All configuration (API keys, AI provider, SMTP, etc.) is done through the browser at `/settings`. Values are stored encrypted in the database.
+1. **`.env` file** — Fully optional. Only needed to change the default port. Contains no secrets.
+2. **Settings UI** — All configuration (API keys, AI provider, SMTP, schedule, etc.) is done through the browser at `/settings`. Values are stored encrypted in the database.
 
 > **No command-line configuration is required.** The master password and all API keys are set up through the browser on first run.
 
@@ -11,9 +11,9 @@ YNAB Financial Report uses a two-tier configuration system:
 
 ## .env File
 
-The `.env` file is optional. If you don't create one, the app uses its built-in defaults (port 8080, sync on the 1st of each month).
+The `.env` file is optional. If you don't create one, the app uses its built-in default (port 8080).
 
-If you do want to customize these settings, copy `.env.example` to `.env` and uncomment the relevant lines. The `.env` file is gitignored and must never be committed.
+If you do want to customize this, copy `.env.example` to `.env` and uncomment the relevant line. The `.env` file is gitignored and must never be committed.
 
 **Do not add API keys or passwords to `.env`.** All secrets are entered through the browser Settings page.
 
@@ -26,16 +26,6 @@ The host port the app is accessible on. Change this if port 8080 is already in u
 
 **Example:** `PORT=9000`
 **Access the app at:** `http://localhost:9000`
-
----
-
-### `SYNC_DAY_OF_MONTH`
-**Optional.** Default: `1`
-
-The day of the month on which the app automatically syncs YNAB data and generates a new report. Set to `1` for the 1st of each month.
-
-**Valid range:** 1–28 (use 28 or lower to avoid issues with February)
-**Example:** `SYNC_DAY_OF_MONTH=5` — syncs on the 5th of every month
 
 ---
 
@@ -142,6 +132,46 @@ Whether to use TLS/STARTTLS encryption for the SMTP connection. **Strongly recom
 
 ---
 
+### Scheduler Settings (Optional)
+
+The scheduler automates your monthly financial workflow — syncing YNAB, generating a report, and optionally emailing it — on a recurring schedule you define. All schedule settings are configured in the browser.
+
+#### Enable Automated Schedule
+Toggle to enable or disable the scheduler. When disabled, all sync and report generation remains manual.
+
+#### Frequency
+How often the automated job runs. Options:
+
+| Frequency | Description | Additional fields |
+|---|---|---|
+| Daily | Every day at 2:00 AM | None |
+| Weekly | Once per week at 2:00 AM | Day of week |
+| Every two weeks | Every other week at 2:00 AM | Day of week |
+| Monthly | Once per month at 2:00 AM | Day of month (1–28) |
+| Yearly | Once per year at 2:00 AM | Month + Day of month |
+
+#### Day of week
+*Required for Weekly and Every two weeks.* The day the job fires (Monday–Sunday).
+
+#### Month
+*Required for Yearly.* The calendar month the job fires in.
+
+#### Day of month
+*Required for Monthly and Yearly.* The day of the month the job fires (1–28). Values above 28 are capped to avoid end-of-month issues in February.
+
+#### Report period
+Which calendar month the generated report covers:
+
+| Option | Description |
+|---|---|
+| Previous calendar month | Reports on the last fully completed month (recommended). A job on the 1st generates the prior month's summary. |
+| Current calendar month | Reports on the in-progress current month. Useful for mid-month pulse checks. |
+
+#### Automatically email the report
+When enabled, the report is emailed immediately after generation using the Email Delivery settings above. Requires email delivery to be enabled and configured.
+
+---
+
 ### Notion Settings (Optional)
 
 Notion sync is optional. When enabled, the app posts a summary of each generated report as a new page in a Notion database.
@@ -165,7 +195,6 @@ The ID of the Notion database where report pages will be created. Found in the d
 | Variable | Where set | Required | Default | Description |
 |---|---|---|---|---|
 | `PORT` | `.env` (optional) | No | `8080` | Host port for the web app |
-| `SYNC_DAY_OF_MONTH` | `.env` (optional) | No | `1` | Day of month for automatic sync |
 | YNAB API Key | Settings UI | Yes | — | YNAB Personal Access Token |
 | YNAB Budget ID | Settings UI | Yes | — | Target budget UUID |
 | AI Provider | Settings UI | Yes | — | `anthropic`, `openai`, `openrouter`, `ollama` |
@@ -179,6 +208,10 @@ The ID of the Notion database where report pages will be created. Found in the d
 | From Address | Settings UI | No | — | Sender email address |
 | To Address | Settings UI | No | — | Report delivery address |
 | Use TLS | Settings UI | No | `true` | Enable SMTP TLS |
+| Enable Schedule | Settings UI | No | `false` | Toggle automated scheduler |
+| Schedule Frequency | Settings UI | No | — | `daily`, `weekly`, `biweekly`, `monthly`, `yearly` |
+| Report Period | Settings UI | No | `previous_month` | `previous_month` or `current_month` |
+| Auto-send Email | Settings UI | No | `false` | Email report after scheduled generation |
 | Enable Notion | Settings UI | No | `false` | Toggle Notion sync |
 | Notion API Key | Settings UI | No | — | Notion integration token (encrypted) |
 | Notion Database ID | Settings UI | No | — | Target Notion database UUID |

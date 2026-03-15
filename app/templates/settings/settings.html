@@ -16,7 +16,7 @@
 
   <h1 style="font-size: 1.5rem; margin-bottom: 0.5rem;">Settings</h1>
   <p class="text-muted" style="margin-bottom: 1.75rem;">
-    Configure your YNAB connection, AI provider, email delivery, and Notion sync.
+    Configure your YNAB connection, AI provider, email delivery, automated schedule, and Notion sync.
     Secret fields are never displayed — submitting a blank secret field leaves the
     existing value unchanged.
   </p>
@@ -203,6 +203,126 @@
         <input type="email" id="report_to_email" name="report_to_email"
                value="{{ settings.report_to_email or '' }}" maxlength="254">
       </div>
+
+      <div style="margin-top:0.5rem;">
+        <button type="button" id="btn-test-smtp"
+                style="background:var(--surface); border:1px solid var(--border); color:var(--text);
+                       padding:0.55rem 1.1rem; border-radius:var(--radius); font-size:0.9rem;
+                       font-weight:500; cursor:pointer;">
+          Test SMTP connection
+        </button>
+      </div>
+      <div id="smtp-status" style="margin-top:0.75rem; font-size:0.875rem;"></div>
+    </div>
+
+    <!-- ================================================================
+         Scheduler
+    ================================================================= -->
+    <div class="card" style="margin-bottom: 1.5rem;">
+      <div class="section-header" style="margin-top:0;">Automated Schedule <span class="text-muted">(optional)</span></div>
+
+      <div class="form-group">
+        <label class="checkbox-label">
+          <input type="checkbox" id="schedule_enabled" name="schedule_enabled" value="1"
+                 {% if settings.schedule_enabled %}checked{% endif %}>
+          Enable automated sync and report generation
+        </label>
+      </div>
+
+      <div id="schedule-fields" style="{% if not settings.schedule_enabled %}display:none;{% endif %}">
+
+        <div class="form-group">
+          <label for="schedule_frequency">Frequency</label>
+          <select id="schedule_frequency" name="schedule_frequency">
+            <option value="">— select —</option>
+            {% for val, label in [
+              ("daily",    "Daily"),
+              ("weekly",   "Weekly"),
+              ("biweekly", "Every two weeks"),
+              ("monthly",  "Monthly"),
+              ("yearly",   "Yearly"),
+            ] %}
+            <option value="{{ val }}"
+              {% if settings.schedule_frequency == val %}selected{% endif %}>
+              {{ label }}
+            </option>
+            {% endfor %}
+          </select>
+        </div>
+
+        {# Day of week — shown for weekly / biweekly #}
+        <div class="form-group" id="field-day-of-week"
+             style="{% if settings.schedule_frequency not in ('weekly', 'biweekly') %}display:none;{% endif %}">
+          <label for="schedule_day_of_week">Day of week</label>
+          <select id="schedule_day_of_week" name="schedule_day_of_week">
+            {% for val, label in [
+              ("mon","Monday"),("tue","Tuesday"),("wed","Wednesday"),
+              ("thu","Thursday"),("fri","Friday"),("sat","Saturday"),("sun","Sunday"),
+            ] %}
+            <option value="{{ val }}"
+              {% if settings.schedule_day_of_week == val %}selected{% endif %}>
+              {{ label }}
+            </option>
+            {% endfor %}
+          </select>
+        </div>
+
+        {# Month — shown for yearly only #}
+        <div class="form-group" id="field-month"
+             style="{% if settings.schedule_frequency != 'yearly' %}display:none;{% endif %}">
+          <label for="schedule_month">Month</label>
+          <select id="schedule_month" name="schedule_month">
+            {% for val, label in [
+              (1,"January"),(2,"February"),(3,"March"),(4,"April"),
+              (5,"May"),(6,"June"),(7,"July"),(8,"August"),
+              (9,"September"),(10,"October"),(11,"November"),(12,"December"),
+            ] %}
+            <option value="{{ val }}"
+              {% if settings.schedule_month == val %}selected{% endif %}>
+              {{ label }}
+            </option>
+            {% endfor %}
+          </select>
+        </div>
+
+        {# Day of month — shown for monthly / yearly #}
+        <div class="form-group" id="field-day-of-month"
+             style="{% if settings.schedule_frequency not in ('monthly', 'yearly') %}display:none;{% endif %}">
+          <label for="schedule_day_of_month">Day of month</label>
+          <input type="number" id="schedule_day_of_month" name="schedule_day_of_month"
+                 min="1" max="28"
+                 value="{{ settings.schedule_day_of_month or 1 }}">
+          <div class="field-hint">1–28 (use 28 or lower to avoid end-of-month issues).</div>
+        </div>
+
+        <div class="form-group">
+          <label for="schedule_report_target">Report period</label>
+          <select id="schedule_report_target" name="schedule_report_target">
+            <option value="previous_month"
+              {% if settings.schedule_report_target != 'current_month' %}selected{% endif %}>
+              Previous calendar month
+            </option>
+            <option value="current_month"
+              {% if settings.schedule_report_target == 'current_month' %}selected{% endif %}>
+              Current calendar month (in-progress)
+            </option>
+          </select>
+          <div class="field-hint">
+            <em>Previous month</em> gives a complete picture; <em>current month</em>
+            reports on data available so far this month.
+          </div>
+        </div>
+
+        <div class="form-group">
+          <label class="checkbox-label">
+            <input type="checkbox" name="schedule_send_email" value="1"
+                   {% if settings.schedule_send_email %}checked{% endif %}>
+            Automatically email the report after generation
+          </label>
+          <div class="field-hint">Requires email delivery to be enabled and configured above.</div>
+        </div>
+
+      </div>{# /schedule-fields #}
     </div>
 
     <!-- ================================================================
@@ -262,6 +382,43 @@
       .catch(function() { setYnabStatus('Network error — could not reach the server.', 'var(--danger)'); })
       .finally(function() { btn.disabled = false; btn.textContent = original; });
   }
+
+  // SMTP test
+  function setSmtpStatus(msg, color) {
+    var el = document.getElementById('smtp-status');
+    el.textContent = msg;
+    el.style.color = color || 'var(--text)';
+  }
+
+  document.getElementById('btn-test-smtp').addEventListener('click', function() {
+    apiPost('/api/test/smtp', this, 'Testing\u2026', function(data) {
+      if (data.status === 'success') {
+        setSmtpStatus(data.message, 'var(--success)');
+      } else {
+        setSmtpStatus('Error: ' + data.message, 'var(--danger)');
+      }
+    });
+  });
+
+  // Scheduler field visibility
+  function updateScheduleFields() {
+    var enabled = document.getElementById('schedule_enabled').checked;
+    document.getElementById('schedule-fields').style.display = enabled ? '' : 'none';
+    if (enabled) updateFrequencyFields();
+  }
+
+  function updateFrequencyFields() {
+    var freq = document.getElementById('schedule_frequency').value;
+    document.getElementById('field-day-of-week').style.display =
+      (freq === 'weekly' || freq === 'biweekly') ? '' : 'none';
+    document.getElementById('field-month').style.display =
+      (freq === 'yearly') ? '' : 'none';
+    document.getElementById('field-day-of-month').style.display =
+      (freq === 'monthly' || freq === 'yearly') ? '' : 'none';
+  }
+
+  document.getElementById('schedule_enabled').addEventListener('change', updateScheduleFields);
+  document.getElementById('schedule_frequency').addEventListener('change', updateFrequencyFields);
 
   document.getElementById('btn-test-ynab').addEventListener('click', function() {
     apiPost('/api/test/ynab', this, 'Testing\u2026', function(data) {

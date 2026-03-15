@@ -7,8 +7,8 @@ from fastapi.staticfiles import StaticFiles
 from fastapi.templating import Jinja2Templates
 from sqlalchemy import select
 
-from app.database import AsyncSessionLocal, create_all
-from app.scheduler import start_scheduler, stop_scheduler
+from app.database import AsyncSessionLocal, apply_migrations, create_all
+from app.scheduler import reschedule_job, start_scheduler, stop_scheduler
 
 
 # ---------------------------------------------------------------------------
@@ -18,9 +18,21 @@ from app.scheduler import start_scheduler, stop_scheduler
 @asynccontextmanager
 async def lifespan(app: FastAPI) -> AsyncGenerator[None, None]:
     # Startup
-    await create_all()
-    start_scheduler()
+    await apply_migrations()   # Add new columns to existing tables (idempotent)
+    await create_all()         # Create any tables that don't yet exist
     app.state.master_key = None  # Locked until user enters master password
+
+    # Load persisted schedule settings (if any) and start the scheduler
+    settings = None
+    try:
+        async with AsyncSessionLocal() as db:
+            from app.models.settings import AppSettings
+            result = await db.execute(select(AppSettings).where(AppSettings.id == 1))
+            settings = result.scalar_one_or_none()
+    except Exception:
+        pass  # DB may be empty on very first run — scheduler starts with no job
+
+    start_scheduler(app, settings)
     yield
     # Shutdown
     stop_scheduler()

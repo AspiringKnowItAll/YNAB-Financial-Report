@@ -40,5 +40,14 @@ class AppSettings(Base):
     notion_token_enc: Mapped[bytes | None] = mapped_column(LargeBinary, nullable=True)
     notion_database_id: Mapped[str | None] = mapped_column(String(64), nullable=True)
 
+    # Scheduler
+    schedule_enabled: Mapped[bool] = mapped_column(Boolean, default=False)
+    schedule_frequency: Mapped[str | None] = mapped_column(String(16), nullable=True)   # "daily"|"weekly"|"biweekly"|"monthly"|"yearly"
+    schedule_day_of_month: Mapped[int | None] = mapped_column(Integer, nullable=True)   # 1–28
+    schedule_day_of_week: Mapped[str | None] = mapped_column(String(3), nullable=True)  # "mon"–"sun"
+    schedule_month: Mapped[int | None] = mapped_column(Integer, nullable=True)          # 1–12 (yearly only)
+    schedule_report_target: Mapped[str] = mapped_column(String(16), default="previous_month")  # "previous_month"|"current_month"
+    schedule_send_email: Mapped[bool] = mapped_column(Boolean, default=False)
+
     # Wizard completion flag
     settings_complete: Mapped[bool] = mapped_column(Boolean, default=False)
