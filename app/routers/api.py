@@ -12,30 +12,31 @@ Implemented in Phases 3–8 as each feature is built.
 """
 
 from fastapi import APIRouter
+from fastapi.responses import JSONResponse
 
 router = APIRouter(prefix="/api", tags=["api"])
 
 
 @router.post("/sync/trigger")
 async def trigger_sync():
-    raise NotImplementedError
+    return JSONResponse({"status": "not_implemented", "message": "YNAB sync coming in Phase 3."}, status_code=501)
 
 
 @router.post("/report/generate")
 async def trigger_report():
-    raise NotImplementedError
+    return JSONResponse({"status": "not_implemented", "message": "Report generation coming in Phase 6."}, status_code=501)
 
 
 @router.post("/test/ynab")
 async def test_ynab():
-    raise NotImplementedError
+    return JSONResponse({"status": "not_implemented", "message": "YNAB test coming in Phase 3."}, status_code=501)
 
 
 @router.post("/test/ai")
 async def test_ai():
-    raise NotImplementedError
+    return JSONResponse({"status": "not_implemented", "message": "AI test coming in Phase 6."}, status_code=501)
 
 
 @router.post("/test/smtp")
 async def test_smtp():
-    raise NotImplementedError
+    return JSONResponse({"status": "not_implemented", "message": "SMTP test coming in Phase 8."}, status_code=501)

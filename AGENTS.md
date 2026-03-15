@@ -312,7 +312,7 @@ Outlier exclusions must be stored in `report_snapshots.outliers_excluded` (JSON 
 | Phase | Status | Description |
 |---|---|---|
 | 1 — Skeleton + Docs | Complete | Project scaffolding, documentation, all stub files |
-| 2 — Auth + Settings UI | Pending | Master password setup, unlock, recovery codes, Settings page, encryption, middleware |
+| 2 — Auth + Settings UI | Complete | Master password setup, unlock, recovery codes, Settings page, encryption, middleware |
 | 3 — YNAB Sync | Pending | YNAB API client, sync pipeline |
 | 4 — Profile Wizard | Pending | Personal context wizard |
 | 5 — Dashboard | Pending | Charts, analysis |

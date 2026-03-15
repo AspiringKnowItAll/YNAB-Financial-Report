@@ -2,7 +2,7 @@ services:
   ynab-report:
     build: .
     ports:
-      - "${PORT:-8000}:8000"
+      - "${PORT:-8080}:8080"
     volumes:
       - ./data:/data
     env_file:

@@ -19,6 +19,7 @@ COPY app/ ./app/
 # /data is the volume mount point for the SQLite DB and key material
 VOLUME ["/data"]
 
-EXPOSE 8000
+EXPOSE 8080
 
-CMD ["uvicorn", "app.main:app", "--host", "0.0.0.0", "--port", "8000"]
+# PORT env var can override the default port (must match docker-compose mapping)
+CMD uvicorn app.main:app --host 0.0.0.0 --port ${PORT:-8080}

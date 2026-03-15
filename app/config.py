@@ -10,7 +10,7 @@ class Config(BaseSettings):
 
     model_config = SettingsConfigDict(env_file=".env", extra="ignore")
 
-    PORT: int = 8000
+    PORT: int = 8080
     SYNC_DAY_OF_MONTH: int = 1
 
 
