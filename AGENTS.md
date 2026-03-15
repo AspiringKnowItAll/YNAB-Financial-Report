@@ -321,6 +321,32 @@ Outlier exclusions must be stored in `report_snapshots.outliers_excluded` (JSON 
 | 8 — Email | Complete | SMTP delivery via aiosmtplib; email_service.py, /api/report/email/{id}, /api/test/smtp, Email Report button on report detail |
 | 9 — Scheduler | Complete | Configurable automated schedule (daily/weekly/biweekly/monthly/yearly); auto sync → report → email; previous or current month target; locked-app skip with error log; DB migration for new columns |
 | 10 — Tests + Hardening | Complete | pytest suite (unit + integration), TemplateResponse deprecation fix, full docs |
+| 11 — First-Run Bug Fixes | In Progress | Docker build fixes, runtime issues, UX improvements found during first real deployment |
+
+---
+
+## Known Issues / Active Work (Phase 11)
+
+These bugs and UX gaps were discovered during the first real end-to-end run of the app and are actively being addressed:
+
+### Bugs Fixed This Session
+- **Dockerfile**: `libgdk-pixbuf2.0-0` renamed to `libgdk-pixbuf-xlib-2.0-0` in Debian Trixie (python:3.12-slim base image)
+- **Dockerfile**: Internal container port was driven by `$PORT`, causing a mismatch with docker-compose port mapping. Internal port is now hardcoded to `8080`; `PORT` env var only controls the host-side mapping.
+- **docker-compose.yml**: `env_file` now marked `required: false` so the app starts without a `.env` file
+- **Middleware**: `/api/*` routes were being redirected to `/settings` or `/setup` with HTML 302s instead of passing through to return JSON errors. API routes are now exempt from Steps 3 and 4 of the auth gate.
+- **Settings page**: Budget ID was a manual text input requiring the user to copy a UUID from the YNAB URL. Replaced with a dynamic dropdown populated by clicking "Test connection & load budgets". Budget name is stored in `app_settings.ynab_budget_name` (new column, migration included).
+- **Settings router**: Saving settings failed when the YNAB API key field was blank (user not re-entering existing key) because the Pydantic schema required it. API key and budget ID/name are now saved independently.
+- **Settings router**: `MissingGreenlet` error after a form validation failure — ORM object was expired after `db.rollback()` and lazily loaded in a sync Jinja2 context. Fixed by re-fetching settings after rollback.
+- **Jinja2 filter**: `milliunit_to_dollars` filter was registered only on the `main.py` templates instance, not on the per-router instances. Introduced `app/templates_config.py` as a single shared `Jinja2Templates` instance with all filters registered. All routers now import from it instead of creating their own instances.
+- **Budget name not persisting**: For accounts with multiple budgets, the JS `change` event on the budget dropdown was not fired on programmatic selection, so the `ynab_budget_name` hidden field was never populated. Fixed by syncing hidden fields from the current selection after rebuilding the dropdown.
+
+### New Files
+- `app/templates_config.py` — Shared Jinja2Templates instance with `milliunit_to_dollars` filter and autoescape enabled. All routers must import from here.
+
+### Known Issues Still To Address
+- **Settings page**: No indication that an AI provider is required before the app will let you proceed past settings. User can save settings without an AI provider and the wizard silently loops.
+- **First-run form**: Logs show a `422 Unprocessable Entity` on the first master password POST attempt — likely a form validation issue worth investigating.
+- **Dashboard**: First real-world view — visual and functional review needed.
 
 ---
 
