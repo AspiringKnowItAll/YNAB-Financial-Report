@@ -58,8 +58,7 @@ async def list_reports_page(request: Request, db: AsyncSession = Depends(get_db)
     if budget_id:
         reports = await list_reports(db, budget_id)
 
-    return templates.TemplateResponse("reports/reports_list.html", {
-        "request": request,
+    return templates.TemplateResponse(request, "reports/reports_list.html", {
         "budget_name": budget_name,
         "budget_id": budget_id,
         "reports": reports,
@@ -75,8 +74,7 @@ async def list_reports_page(request: Request, db: AsyncSession = Depends(get_db)
 async def get_report_page(request: Request, report_id: int, db: AsyncSession = Depends(get_db)):
     snapshot = await get_report(db, report_id)
     if snapshot is None:
-        return templates.TemplateResponse("placeholder.html", {
-            "request": request,
+        return templates.TemplateResponse(request, "placeholder.html", {
             "title": "Report Not Found",
             "message": f"Report #{report_id} does not exist.",
         }, status_code=404)
@@ -121,8 +119,7 @@ async def get_report_page(request: Request, report_id: int, db: AsyncSession = D
         and settings.report_to_email
     )
 
-    return templates.TemplateResponse("reports/report_detail.html", {
-        "request": request,
+    return templates.TemplateResponse(request, "reports/report_detail.html", {
         "snapshot": snapshot,
         "budget_name": budget_name,
         "trend_chart_json": trend_chart_json,

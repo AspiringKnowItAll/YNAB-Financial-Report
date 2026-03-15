@@ -46,7 +46,6 @@ async def get_settings(request: Request, db: AsyncSession = Depends(get_db)):
     # Build a context dict with only non-secret values; secrets are indicated
     # by a boolean flag so the template can show a placeholder.
     context = {
-        "request": request,
         "settings": settings,
         "has_ynab_key": bool(settings.ynab_api_key_enc),
         "has_ai_key": bool(settings.ai_api_key_enc),
@@ -54,7 +53,7 @@ async def get_settings(request: Request, db: AsyncSession = Depends(get_db)):
         "has_notion_token": bool(settings.notion_token_enc),
         "saved": request.query_params.get("saved") == "1",
     }
-    return templates.TemplateResponse("settings/settings.html", context)
+    return templates.TemplateResponse(request, "settings/settings.html", context)
 
 
 @router.post("/settings", response_class=HTMLResponse)
@@ -187,7 +186,6 @@ async def post_settings(
 
     if errors:
         context = {
-            "request": request,
             "settings": settings,
             "has_ynab_key": bool(settings.ynab_api_key_enc),
             "has_ai_key": bool(settings.ai_api_key_enc),
@@ -197,7 +195,7 @@ async def post_settings(
             "saved": False,
         }
         await db.rollback()
-        return templates.TemplateResponse("settings/settings.html", context, status_code=422)
+        return templates.TemplateResponse(request, "settings/settings.html", context, status_code=422)
 
     # Mark settings complete if minimum required fields are present
     if settings.ynab_api_key_enc and settings.ynab_budget_id and settings.ai_provider:

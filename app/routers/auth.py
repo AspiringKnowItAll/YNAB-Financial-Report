@@ -28,7 +28,7 @@ templates = Jinja2Templates(directory="app/templates")
 async def get_first_run(request: Request):
     if auth_service.is_setup_complete():
         return RedirectResponse("/unlock", status_code=302)
-    return templates.TemplateResponse("auth/first_run.html", {"request": request})
+    return templates.TemplateResponse(request, "auth/first_run.html")
 
 
 @router.post("/first-run", response_class=HTMLResponse)
@@ -46,8 +46,9 @@ async def post_first_run(
     except Exception as exc:
         errors = [str(e["msg"]) for e in exc.errors()] if hasattr(exc, "errors") else [str(exc)]
         return templates.TemplateResponse(
+            request,
             "auth/first_run.html",
-            {"request": request, "errors": errors},
+            {"errors": errors},
             status_code=422,
         )
 
@@ -55,8 +56,9 @@ async def post_first_run(
     request.app.state.master_key = await auth_service.unlock(validated.password)
 
     return templates.TemplateResponse(
+        request,
         "auth/recovery_codes.html",
-        {"request": request, "codes": recovery_codes},
+        {"codes": recovery_codes},
     )
 
 
@@ -70,7 +72,7 @@ async def get_unlock(request: Request):
         return RedirectResponse("/first-run", status_code=302)
     if request.app.state.master_key is not None:
         return RedirectResponse("/", status_code=302)
-    return templates.TemplateResponse("auth/unlock.html", {"request": request})
+    return templates.TemplateResponse(request, "auth/unlock.html")
 
 
 @router.post("/unlock", response_class=HTMLResponse)
@@ -83,8 +85,9 @@ async def post_unlock(
     except Exception as exc:
         errors = [str(e["msg"]) for e in exc.errors()] if hasattr(exc, "errors") else [str(exc)]
         return templates.TemplateResponse(
+            request,
             "auth/unlock.html",
-            {"request": request, "errors": errors},
+            {"errors": errors},
             status_code=422,
         )
 
@@ -92,8 +95,9 @@ async def post_unlock(
         request.app.state.master_key = await auth_service.unlock(validated.password)
     except ValueError:
         return templates.TemplateResponse(
+            request,
             "auth/unlock.html",
-            {"request": request, "errors": ["Incorrect password. Please try again."]},
+            {"errors": ["Incorrect password. Please try again."]},
             status_code=401,
         )
 
@@ -108,7 +112,7 @@ async def post_unlock(
 async def get_recovery(request: Request):
     if not auth_service.is_setup_complete():
         return RedirectResponse("/first-run", status_code=302)
-    return templates.TemplateResponse("auth/recovery.html", {"request": request})
+    return templates.TemplateResponse(request, "auth/recovery.html")
 
 
 @router.post("/recovery", response_class=HTMLResponse)
@@ -121,8 +125,9 @@ async def post_recovery(
     except Exception as exc:
         errors = [str(e["msg"]) for e in exc.errors()] if hasattr(exc, "errors") else [str(exc)]
         return templates.TemplateResponse(
+            request,
             "auth/recovery.html",
-            {"request": request, "errors": errors},
+            {"errors": errors},
             status_code=422,
         )
 
@@ -130,8 +135,9 @@ async def post_recovery(
         request.app.state.master_key = await auth_service.use_recovery_code(validated.code)
     except ValueError:
         return templates.TemplateResponse(
+            request,
             "auth/recovery.html",
-            {"request": request, "errors": ["Invalid or already-used recovery code."]},
+            {"errors": ["Invalid or already-used recovery code."]},
             status_code=401,
         )
 
@@ -142,7 +148,4 @@ async def post_recovery(
     os.remove(auth_service.VERIFY_PATH)
     os.remove(auth_service.RECOVERY_PATH)
 
-    return templates.TemplateResponse(
-        "auth/recovery_success.html",
-        {"request": request},
-    )
+    return templates.TemplateResponse(request, "auth/recovery_success.html")

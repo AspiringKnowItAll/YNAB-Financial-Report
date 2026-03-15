@@ -296,8 +296,7 @@ async def get_dashboard(request: Request, db: AsyncSession = Depends(get_db)):
             },
         })
 
-    return templates.TemplateResponse("dashboard/dashboard.html", {
-        "request": request,
+    return templates.TemplateResponse(request, "dashboard/dashboard.html", {
         "budget_name": budget_name,
         "has_data": has_data,
         "last_sync": last_sync,

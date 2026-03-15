@@ -41,8 +41,7 @@ async def _get_or_create_profile(db: AsyncSession) -> UserProfile:
 @router.get("/setup", response_class=HTMLResponse)
 async def get_setup(request: Request, db: AsyncSession = Depends(get_db)):
     profile = await _get_or_create_profile(db)
-    return templates.TemplateResponse("setup/setup.html", {
-        "request": request,
+    return templates.TemplateResponse(request, "setup/setup.html", {
         "profile": profile,
         "errors": [],
     })
@@ -85,8 +84,7 @@ async def post_setup(
         profile.housing_type = housing_type or None
         profile.notes = notes or None
         await db.rollback()
-        return templates.TemplateResponse("setup/setup.html", {
-            "request": request,
+        return templates.TemplateResponse(request, "setup/setup.html", {
             "profile": profile,
             "errors": errors,
         }, status_code=422)
