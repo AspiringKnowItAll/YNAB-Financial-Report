@@ -1,0 +1,120 @@
+# YNAB Financial Report
+
+A self-hosted financial dashboard that connects to your [YNAB](https://www.youneedabudget.com/) account, tracks spending trends over time, and delivers AI-powered financial insights — all running in a Docker container you control.
+
+[![License: MIT](https://img.shields.io/badge/License-MIT-blue.svg)](LICENSE)
+[![Python 3.12](https://img.shields.io/badge/python-3.12-blue.svg)](https://www.python.org/downloads/)
+[![Docker](https://img.shields.io/badge/docker-ready-blue.svg)](https://www.docker.com/)
+
+---
+
+## What it does
+
+- **Syncs your YNAB data** monthly (or on demand) and stores it locally
+- **Visualizes spending trends** with interactive charts — with statistical outlier handling so one big purchase doesn't skew your averages
+- **Generates AI reports** with an executive summary, notable patterns, concerns, and actionable recommendations
+- **Tracks savings rate** and budget adherence over time
+- **Exports reports** as PDF or HTML
+- **Emails reports** to yourself via your own mail server
+- **Optionally syncs** report summaries to a Notion database
+
+Your data never leaves your machine (except to the AI provider you choose).
+
+---
+
+## Quick Start
+
+**Prerequisites:** [Docker](https://docs.docker.com/get-docker/) and [Docker Compose](https://docs.docker.com/compose/install/)
+
+```bash
+# 1. Clone the repo
+git clone https://github.com/AspiringKnowItAll/YNAB-Financial-Report.git
+cd YNAB-Financial-Report
+
+# 2. Start the app
+docker-compose up -d
+```
+
+Open **http://localhost:8080** — the setup wizard will guide you through everything in the browser. No command-line configuration required.
+
+For a full walkthrough, see [docs/setup.md](docs/setup.md).
+
+---
+
+## Features
+
+| Feature | Details |
+|---|---|
+| YNAB sync | Delta sync using `last_knowledge_of_server` — only changed data is fetched after the first run |
+| Interactive charts | Plotly-powered, in-browser charts for spending trends, savings rate, and budget vs actual |
+| Outlier handling | IQR-based statistical outlier detection removes one-time spikes from trend calculations |
+| AI insights | Works with Anthropic, OpenAI, OpenRouter, or a local Ollama instance |
+| Report export | Download any report as PDF or self-contained HTML |
+| Email delivery | Sends reports via your own SMTP server — no third-party email infrastructure |
+| Notion sync | Optionally posts report summaries to a Notion database |
+| Encrypted storage | All API keys and secrets are encrypted at rest (Fernet/AES); master key derived via Argon2id |
+| Recovery codes | 8 single-use backup codes generated at setup — full access recovery if master password is lost |
+
+---
+
+## Configuration
+
+Everything is configured through the browser — no command-line setup required. The `.env` file is optional and only needed if you want to change the port or sync schedule.
+
+See [docs/configuration.md](docs/configuration.md) for a full reference of all available options.
+
+---
+
+## AI Provider Support
+
+You can use any of the following:
+
+- **Anthropic** — Claude models (claude-sonnet-4-6, etc.)
+- **OpenAI** — GPT-4o and other OpenAI models
+- **OpenRouter** — Access to many models via a single API key
+- **Ollama** — Point at your local Ollama instance for fully offline AI analysis
+
+---
+
+## Security
+
+This app handles personal financial data. Security decisions made in this project:
+
+- **Master password** set in the browser on first run — never stored in plaintext anywhere
+- **Argon2id** key derivation — the encryption key is derived from your password, held in memory only, and never written to disk
+- **Recovery codes** generated after setup — 8 single-use backup codes that can fully restore access if your master password is forgotten
+- **App locks on restart** — enter your master password in the browser to unlock after each container restart
+- All secrets stored in SQLite are encrypted at rest using AES (Fernet)
+- All user inputs are validated and sanitized before processing
+- No raw SQL — all database access via SQLAlchemy ORM
+- No data is transmitted to any third party except the AI provider and YNAB API you configure
+
+See [AGENTS.md](AGENTS.md) for full security requirements applied to this codebase.
+
+---
+
+## Roadmap
+
+- [x] Core architecture and documentation
+- [ ] Settings UI with encrypted secret storage
+- [ ] YNAB sync pipeline
+- [ ] Personal profile wizard
+- [ ] Dashboard with Plotly charts
+- [ ] AI commentary and report snapshots
+- [ ] Historical report browser and PDF/HTML export
+- [ ] Email delivery
+- [ ] Automated monthly scheduler
+- [ ] Notion sync
+- [ ] Conversational AI chat interface *(post-v1)*
+
+---
+
+## Contributing
+
+See [docs/development.md](docs/development.md) for local development setup and contribution guidelines.
+
+---
+
+## License
+
+[MIT](LICENSE) — free to use, modify, and distribute with attribution.
