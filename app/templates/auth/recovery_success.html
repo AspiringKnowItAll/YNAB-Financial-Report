@@ -1,0 +1,26 @@
+{% extends "base.html" %}
+{% block title %}Recovery Successful — YNAB Financial Report{% endblock %}
+
+{% block content %}
+<div class="container" style="padding-top: 4rem;">
+  <div class="logo">
+    <div class="logo__text">YNAB Financial Report</div>
+  </div>
+
+  <div class="card">
+    <div class="card__title">Recovery successful</div>
+    <div class="card__subtitle">
+      Your recovery code was accepted and the app has been unlocked.
+    </div>
+
+    <div class="alert alert--warning" style="margin-bottom: 1.5rem;">
+      Your old master password and all remaining recovery codes have been cleared.
+      You must set a new master password now to re-secure your data.
+    </div>
+
+    <a href="/first-run" class="btn btn--primary btn--block">
+      Set new master password
+    </a>
+  </div>
+</div>
+{% endblock %}

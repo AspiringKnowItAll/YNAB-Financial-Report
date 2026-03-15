@@ -1,0 +1,19 @@
+{% extends "base.html" %}
+{% block title %}{{ title }} — YNAB Financial Report{% endblock %}
+
+{% block nav %}
+<nav class="navbar">
+  <span class="navbar__brand">YNAB Financial Report</span>
+  <div class="navbar__links">
+    <a href="/">Dashboard</a>
+    <a href="/settings">Settings</a>
+  </div>
+</nav>
+{% endblock %}
+
+{% block content %}
+<div class="container" style="padding-top: 4rem; text-align: center;">
+  <h1 style="font-size: 1.5rem; margin-bottom: 0.75rem;">{{ title }}</h1>
+  <p class="text-muted">{{ message }}</p>
+</div>
+{% endblock %}

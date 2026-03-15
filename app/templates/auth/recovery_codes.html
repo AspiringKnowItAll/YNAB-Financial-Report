@@ -1,0 +1,59 @@
+{% extends "base.html" %}
+{% block title %}Save Your Recovery Codes — YNAB Financial Report{% endblock %}
+
+{% block content %}
+<div class="container" style="padding-top: 3rem; max-width: 560px;">
+  <div class="logo">
+    <div class="logo__text">YNAB Financial Report</div>
+  </div>
+
+  <div class="card">
+    <div class="card__title">Save your recovery codes</div>
+    <div class="card__subtitle">
+      These 8 codes are the only way to recover your data if you forget your
+      master password. Each code can only be used once.
+      <strong>Copy them now — they will not be shown again.</strong>
+    </div>
+
+    <div class="alert alert--warning">
+      Store these codes somewhere safe and offline (password manager, printed paper).
+      Anyone with a code and access to your data volume can unlock the app.
+    </div>
+
+    <div style="
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 0.6rem;
+      margin: 1.25rem 0;
+      font-family: 'Courier New', monospace;
+      font-size: 0.95rem;
+    ">
+      {% for code in codes %}
+      <div style="
+        background: var(--bg);
+        border: 1px solid var(--border);
+        border-radius: var(--radius);
+        padding: 0.55rem 0.75rem;
+        text-align: center;
+        letter-spacing: 0.05em;
+        color: var(--text);
+      ">{{ code }}</div>
+      {% endfor %}
+    </div>
+
+    <form method="get" action="/settings">
+      <div class="form-group" style="margin-bottom: 1rem;">
+        <label class="checkbox-label" style="font-size:0.9rem;">
+          <input type="checkbox" id="codes_saved" required>
+          I have saved all 8 recovery codes in a secure location.
+        </label>
+      </div>
+
+      <button type="submit" class="btn btn--primary btn--block"
+              onclick="return document.getElementById('codes_saved').checked || (alert('Please confirm you have saved your recovery codes.'), false);">
+        Continue to settings
+      </button>
+    </form>
+  </div>
+</div>
+{% endblock %}

@@ -1,0 +1,291 @@
+{% extends "base.html" %}
+{% block title %}Settings — YNAB Financial Report{% endblock %}
+
+{% block nav %}
+<nav class="navbar">
+  <span class="navbar__brand">YNAB Financial Report</span>
+  <div class="navbar__links">
+    <a href="/">Dashboard</a>
+    <a href="/settings" style="color: var(--text);">Settings</a>
+  </div>
+</nav>
+{% endblock %}
+
+{% block content %}
+<div class="container container--wide" style="padding-top: 2rem; padding-bottom: 3rem;">
+
+  <h1 style="font-size: 1.5rem; margin-bottom: 0.5rem;">Settings</h1>
+  <p class="text-muted" style="margin-bottom: 1.75rem;">
+    Configure your YNAB connection, AI provider, email delivery, and Notion sync.
+    Secret fields are never displayed — submitting a blank secret field leaves the
+    existing value unchanged.
+  </p>
+
+  {% if errors %}
+  <div class="alert alert--error" style="margin-bottom: 1.5rem;">
+    <strong>Please fix the following errors:</strong>
+    <ul style="margin: 0.5rem 0 0 1.25rem; padding: 0;">
+      {% for error in errors %}<li>{{ error }}</li>{% endfor %}
+    </ul>
+  </div>
+  {% endif %}
+
+  {% if saved %}
+  <div class="alert alert--success" style="margin-bottom: 1.5rem;">
+    Settings saved successfully.
+  </div>
+  {% endif %}
+
+  <form method="post" action="/settings" autocomplete="off">
+
+    <!-- ================================================================
+         YNAB
+    ================================================================= -->
+    <div class="card" style="margin-bottom: 1.5rem;">
+      <div class="section-header" style="margin-top:0;">YNAB</div>
+
+      <div class="form-group">
+        <label for="ynab_api_key">Personal access token</label>
+        {% if has_ynab_key %}
+          <p class="text-muted" style="margin-bottom:0.4rem;">
+            Current value: <span class="secret-badge">••••••••</span>
+          </p>
+        {% endif %}
+        <input type="password" id="ynab_api_key" name="ynab_api_key"
+               autocomplete="off" maxlength="512"
+               placeholder="{% if has_ynab_key %}Leave blank to keep existing key{% else %}Paste your YNAB personal access token{% endif %}">
+        <div class="field-hint">
+          Found at <em>YNAB → My Account → Developer Settings → Personal Access Tokens</em>.
+        </div>
+      </div>
+
+      <div class="form-group">
+        <label for="ynab_budget_id">Budget ID</label>
+        <input type="text" id="ynab_budget_id" name="ynab_budget_id"
+               value="{{ settings.ynab_budget_id or '' }}" maxlength="64">
+        <div class="field-hint">
+          The UUID from your YNAB budget URL:
+          <code>https://app.ynab.com/<strong>&lt;budget-id&gt;</strong>/budget</code>
+        </div>
+      </div>
+
+      <div style="display:flex; gap:0.75rem; flex-wrap:wrap; margin-top:0.5rem;">
+        <button type="button" id="btn-test-ynab"
+                style="background:var(--surface); border:1px solid var(--border); color:var(--text);
+                       padding:0.55rem 1.1rem; border-radius:var(--radius); font-size:0.9rem;
+                       font-weight:500; cursor:pointer;">
+          Test connection
+        </button>
+        <button type="button" id="btn-sync-now"
+                style="background:var(--surface); border:1px solid var(--border); color:var(--text);
+                       padding:0.55rem 1.1rem; border-radius:var(--radius); font-size:0.9rem;
+                       font-weight:500; cursor:pointer;">
+          Sync now
+        </button>
+      </div>
+      <div id="ynab-status" style="margin-top:0.75rem; font-size:0.875rem;"></div>
+    </div>
+
+    <!-- ================================================================
+         AI Provider
+    ================================================================= -->
+    <div class="card" style="margin-bottom: 1.5rem;">
+      <div class="section-header" style="margin-top:0;">AI Provider</div>
+
+      <div class="form-group">
+        <label for="ai_provider">Provider</label>
+        <select id="ai_provider" name="ai_provider">
+          <option value="">— select —</option>
+          {% for val, label in [
+            ("anthropic",   "Anthropic (Claude)"),
+            ("openai",      "OpenAI (GPT)"),
+            ("openrouter",  "OpenRouter"),
+            ("ollama",      "Ollama (local)"),
+          ] %}
+          <option value="{{ val }}"
+            {% if settings.ai_provider == val %}selected{% endif %}>
+            {{ label }}
+          </option>
+          {% endfor %}
+        </select>
+      </div>
+
+      <div class="form-group">
+        <label for="ai_model">Model name</label>
+        <input type="text" id="ai_model" name="ai_model"
+               value="{{ settings.ai_model or '' }}" maxlength="128"
+               placeholder="e.g. claude-sonnet-4-6, gpt-4o, llama3">
+      </div>
+
+      <div class="form-group">
+        <label for="ai_api_key">API key</label>
+        {% if has_ai_key %}
+          <p class="text-muted" style="margin-bottom:0.4rem;">
+            Current value: <span class="secret-badge">••••••••</span>
+          </p>
+        {% endif %}
+        <input type="password" id="ai_api_key" name="ai_api_key"
+               autocomplete="off" maxlength="512"
+               placeholder="{% if has_ai_key %}Leave blank to keep existing key{% else %}Provider API key (not needed for Ollama){% endif %}">
+      </div>
+
+      <div class="form-group">
+        <label for="ai_base_url">Base URL <span class="text-muted">(OpenRouter / Ollama)</span></label>
+        <input type="url" id="ai_base_url" name="ai_base_url"
+               value="{{ settings.ai_base_url or '' }}" maxlength="512"
+               placeholder="e.g. http://localhost:11434/v1">
+        <div class="field-hint">Leave blank for Anthropic and OpenAI.</div>
+      </div>
+    </div>
+
+    <!-- ================================================================
+         Email / SMTP
+    ================================================================= -->
+    <div class="card" style="margin-bottom: 1.5rem;">
+      <div class="section-header" style="margin-top:0;">Email Delivery</div>
+
+      <div class="form-group">
+        <label class="checkbox-label">
+          <input type="checkbox" name="email_enabled" value="1"
+                 {% if settings.email_enabled %}checked{% endif %}>
+          Enable email delivery of monthly reports
+        </label>
+      </div>
+
+      <div class="form-group">
+        <label for="smtp_host">SMTP host</label>
+        <input type="text" id="smtp_host" name="smtp_host"
+               value="{{ settings.smtp_host or '' }}" maxlength="253"
+               placeholder="smtp.example.com">
+      </div>
+
+      <div class="form-group">
+        <label for="smtp_port">SMTP port</label>
+        <input type="number" id="smtp_port" name="smtp_port"
+               value="{{ settings.smtp_port or 587 }}" min="1" max="65535">
+      </div>
+
+      <div class="form-group">
+        <label for="smtp_username">SMTP username</label>
+        <input type="text" id="smtp_username" name="smtp_username"
+               value="{{ settings.smtp_username or '' }}" maxlength="512"
+               autocomplete="off">
+      </div>
+
+      <div class="form-group">
+        <label for="smtp_password">SMTP password</label>
+        {% if has_smtp_password %}
+          <p class="text-muted" style="margin-bottom:0.4rem;">
+            Current value: <span class="secret-badge">••••••••</span>
+          </p>
+        {% endif %}
+        <input type="password" id="smtp_password" name="smtp_password"
+               autocomplete="off" maxlength="512"
+               placeholder="{% if has_smtp_password %}Leave blank to keep existing password{% else %}SMTP password{% endif %}">
+      </div>
+
+      <div class="form-group">
+        <label class="checkbox-label">
+          <input type="checkbox" name="smtp_use_tls" value="1"
+                 {% if settings.smtp_use_tls %}checked{% endif %}>
+          Use TLS (recommended)
+        </label>
+      </div>
+
+      <div class="form-group">
+        <label for="smtp_from_email">From address</label>
+        <input type="email" id="smtp_from_email" name="smtp_from_email"
+               value="{{ settings.smtp_from_email or '' }}" maxlength="254">
+      </div>
+
+      <div class="form-group">
+        <label for="report_to_email">Send reports to</label>
+        <input type="email" id="report_to_email" name="report_to_email"
+               value="{{ settings.report_to_email or '' }}" maxlength="254">
+      </div>
+    </div>
+
+    <!-- ================================================================
+         Notion
+    ================================================================= -->
+    <div class="card" style="margin-bottom: 1.75rem;">
+      <div class="section-header" style="margin-top:0;">Notion Sync <span class="text-muted">(optional)</span></div>
+
+      <div class="form-group">
+        <label class="checkbox-label">
+          <input type="checkbox" name="notion_enabled" value="1"
+                 {% if settings.notion_enabled %}checked{% endif %}>
+          Sync monthly summaries to Notion
+        </label>
+      </div>
+
+      <div class="form-group">
+        <label for="notion_token">Notion integration token</label>
+        {% if has_notion_token %}
+          <p class="text-muted" style="margin-bottom:0.4rem;">
+            Current value: <span class="secret-badge">••••••••</span>
+          </p>
+        {% endif %}
+        <input type="password" id="notion_token" name="notion_token"
+               autocomplete="off" maxlength="512"
+               placeholder="{% if has_notion_token %}Leave blank to keep existing token{% else %}secret_...{% endif %}">
+      </div>
+
+      <div class="form-group">
+        <label for="notion_database_id">Database ID</label>
+        <input type="text" id="notion_database_id" name="notion_database_id"
+               value="{{ settings.notion_database_id or '' }}" maxlength="64">
+      </div>
+    </div>
+
+    <button type="submit" class="btn btn--primary" style="min-width: 160px;">
+      Save settings
+    </button>
+
+  </form>
+</div>
+
+<script>
+  function setYnabStatus(msg, color) {
+    var el = document.getElementById('ynab-status');
+    el.textContent = msg;
+    el.style.color = color || 'var(--text)';
+  }
+
+  function apiPost(url, btn, loadingText, callback) {
+    var original = btn.textContent;
+    btn.disabled = true;
+    btn.textContent = loadingText;
+    fetch(url, { method: 'POST', headers: { 'X-Requested-With': 'XMLHttpRequest' } })
+      .then(function(r) { return r.json(); })
+      .then(function(data) { callback(data); })
+      .catch(function() { setYnabStatus('Network error — could not reach the server.', 'var(--danger)'); })
+      .finally(function() { btn.disabled = false; btn.textContent = original; });
+  }
+
+  document.getElementById('btn-test-ynab').addEventListener('click', function() {
+    apiPost('/api/test/ynab', this, 'Testing\u2026', function(data) {
+      if (data.status === 'success') {
+        setYnabStatus('Connected. Budgets found: ' + data.budgets.join(', '), 'var(--success)');
+      } else {
+        setYnabStatus('Error: ' + data.message, 'var(--danger)');
+      }
+    });
+  });
+
+  document.getElementById('btn-sync-now').addEventListener('click', function() {
+    setYnabStatus('Syncing\u2026 this may take a moment.', 'var(--muted)');
+    apiPost('/api/sync/trigger', this, 'Syncing\u2026', function(data) {
+      if (data.status === 'success') {
+        setYnabStatus(
+          'Sync complete. Added: ' + data.transactions_added +
+          ', updated: ' + data.transactions_updated + '.',
+          'var(--success)'
+        );
+      } else {
+        setYnabStatus('Sync failed: ' + data.message, 'var(--danger)');
+      }
+    });
+  });
+</script>
+{% endblock %}

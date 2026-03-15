@@ -1,0 +1,45 @@
+{% extends "base.html" %}
+{% block title %}Recovery — YNAB Financial Report{% endblock %}
+
+{% block content %}
+<div class="container" style="padding-top: 4rem;">
+  <div class="logo">
+    <div class="logo__text">YNAB Financial Report</div>
+  </div>
+
+  <div class="card">
+    <div class="card__title">Account recovery</div>
+    <div class="card__subtitle">
+      Enter one of your recovery codes to unlock the app.
+      The code will be permanently invalidated after use.
+    </div>
+
+    {% if errors %}
+    <div class="alert alert--error">
+      <ul style="list-style: none; padding: 0; margin: 0;">
+        {% for error in errors %}<li>{{ error }}</li>{% endfor %}
+      </ul>
+    </div>
+    {% endif %}
+
+    <form method="post" action="/recovery" autocomplete="off">
+      <div class="form-group">
+        <label for="code">Recovery code</label>
+        <input type="text" id="code" name="code" autofocus
+               placeholder="XXXXX-XXXXX-XXXXX-XXXXX"
+               style="font-family: 'Courier New', monospace; letter-spacing: 0.05em;"
+               required minlength="23" maxlength="23" autocomplete="off">
+        <div class="field-hint">Format: 4 groups of 5 uppercase characters separated by dashes.</div>
+      </div>
+
+      <button type="submit" class="btn btn--primary btn--block" style="margin-top: 0.5rem;">
+        Use recovery code
+      </button>
+    </form>
+
+    <p class="text-center mt-3 text-muted">
+      <a href="/unlock">Back to unlock</a>
+    </p>
+  </div>
+</div>
+{% endblock %}
