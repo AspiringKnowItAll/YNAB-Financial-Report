@@ -99,29 +99,47 @@ Services in `app/services/` are the core of the app. They follow these rules:
 # Run the full test suite
 pytest
 
-# Run with coverage report
+# Run with verbose output
+pytest -v
+
+# Run only unit tests
+pytest tests/unit/
+
+# Run only integration tests
+pytest tests/integration/
+
+# Run a specific file
+pytest tests/unit/test_analysis_service.py -v
+
+# Run with coverage report (requires pytest-cov)
 pytest --cov=app --cov-report=term-missing
-
-# Run a specific test file
-pytest tests/test_analysis.py
-
-# Run a specific test
-pytest tests/test_analysis.py::test_outlier_detection_basic
 ```
 
-### Test database
+### Test structure
 
-Tests use an in-memory SQLite database created fresh for each test session. The `conftest.py` sets this up automatically — you don't need a real database to run tests.
-
-### Testing against a real YNAB account
-
-Integration tests that hit the live YNAB API are skipped by default. To run them, set the environment variables:
-
-```bash
-YNAB_TEST_API_KEY=your_token YNAB_TEST_BUDGET_ID=your_id pytest tests/ -m integration
+```
+tests/
+├── conftest.py                  # Shared fixtures (master_key, etc.)
+├── unit/
+│   ├── test_encryption.py       # Fernet encrypt/decrypt
+│   ├── test_auth_service.py     # Master password, recovery codes
+│   ├── test_analysis_service.py # IQR outlier detection, aggregations
+│   ├── test_schemas.py          # All Pydantic input validation schemas
+│   └── test_scheduler.py        # build_trigger, _get_target_month
+└── integration/
+    ├── conftest.py              # ASGI test client, salt file fixtures
+    └── test_middleware.py       # Auth gate redirect chain
 ```
 
-These tests are not required to pass for a PR to be merged, but they are useful for verifying YNAB API behavior.
+### Unit tests
+
+Unit tests cover pure service functions and Pydantic schemas. They use `pytest-asyncio` for async functions and `tmp_path` fixtures to redirect file I/O away from `/data/`. Argon2id parameters are patched to minimal values in auth tests so the full suite runs in under 2 seconds.
+
+### Integration tests
+
+Integration tests use `httpx.ASGITransport` to send requests directly to the FastAPI ASGI app without starting a real server or triggering the lifespan (no database, no scheduler). `app.state` and `os.path.exists` are controlled via fixtures and `monkeypatch` to simulate different auth states.
+
+No live YNAB API key or running Docker container is required to run any test.
 
 ---
 
@@ -211,7 +229,7 @@ class MyNewProvider:
    - The provider table in `AGENTS.md`
    - The provider table in `docs/configuration.md`
 
-5. Add unit tests in `tests/test_ai_service.py` with mocked HTTP responses
+5. Add unit tests in `tests/unit/test_ai_service.py` with mocked HTTP responses
 
 ---
 
@@ -255,7 +273,7 @@ Per the project's agent rules, documentation must be updated in the same PR as c
 
 1. Fork the repository and create a branch from `main`
 2. Make your changes following the guidelines above
-3. Run `pytest`, `ruff check`, and `mypy` — all must pass
+3. Run `pytest` — all tests must pass with no warnings
 4. Update documentation as required
 5. Open a pull request with a clear description of what changed and why
 

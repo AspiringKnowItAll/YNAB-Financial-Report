@@ -102,10 +102,34 @@ See [AGENTS.md](AGENTS.md) for full security requirements applied to this codeba
 - [x] Dashboard with Plotly charts
 - [x] AI commentary and report snapshots
 - [x] Historical report browser and PDF/HTML export
-- [ ] Email delivery
-- [ ] Automated monthly scheduler
-- [ ] Notion sync
+- [x] Email delivery via user-configured SMTP server
+- [x] Automated scheduler (daily / weekly / biweekly / monthly / yearly)
+- [x] Test suite and hardening
+- [ ] Notion sync *(post-v1)*
 - [ ] Conversational AI chat interface *(post-v1)*
+
+---
+
+## Running Tests
+
+```bash
+# Install dependencies (includes test packages)
+pip install -r requirements.txt
+
+# Run the full suite
+pytest
+
+# Run only unit tests
+pytest tests/unit/
+
+# Run only integration tests
+pytest tests/integration/
+
+# Run a specific file
+pytest tests/unit/test_analysis_service.py -v
+```
+
+See [docs/development.md](docs/development.md) for full details on the test architecture.
 
 ---
 
