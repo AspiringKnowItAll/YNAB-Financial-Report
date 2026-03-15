@@ -317,7 +317,7 @@ Outlier exclusions must be stored in `report_snapshots.outliers_excluded` (JSON 
 | 4 — Profile Wizard | Complete | Personal context wizard (household size, income type, goals, housing, notes) |
 | 5 — Dashboard | Complete | 12-month trend chart, category breakdown with IQR-adjusted averages, sync status bar, net worth |
 | 6 — AI Reports | Complete | AI provider abstraction (Anthropic/OpenAI/OpenRouter/Ollama), report snapshots, /reports list + detail, /api/report/generate, /api/test/ai |
-| 7 — Export | Pending | PDF/HTML export |
+| 7 — Export | Complete | PDF/HTML export via WeasyPrint; standalone HTML with interactive Plotly charts |
 | 8 — Email | Pending | SMTP delivery |
 | 9 — Scheduler + Notion | Pending | Automated runs, Notion sync |
 | 10 — Tests + Hardening | Pending | Test suite, error handling, full docs |

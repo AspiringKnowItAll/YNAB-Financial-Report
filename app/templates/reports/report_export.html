@@ -1,0 +1,211 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>{{ budget_name }} — {{ snapshot.month }} Financial Report</title>
+  <style>
+    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+    :root {
+      --bg: #0f1117;
+      --surface: #1a1d27;
+      --border: #2e3147;
+      --text: #e2e4ef;
+      --muted: #7b80a0;
+      --accent: #6c8fff;
+      --danger: #ff6b6b;
+      --success: #4caf82;
+      --warning: #f5a623;
+      --radius: 8px;
+    }
+
+    body {
+      font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+      background: var(--bg);
+      color: var(--text);
+      font-size: 15px;
+      line-height: 1.6;
+      padding: 2rem 1.5rem;
+    }
+
+    .report-wrapper {
+      max-width: 1000px;
+      margin: 0 auto;
+    }
+
+    /* ── Header ─────────────────────────────────────────────────────────── */
+    .report-header {
+      border-bottom: 1px solid var(--border);
+      padding-bottom: 1.25rem;
+      margin-bottom: 1.75rem;
+    }
+
+    .report-header__brand {
+      font-size: 0.8rem;
+      font-weight: 700;
+      text-transform: uppercase;
+      letter-spacing: 0.08em;
+      color: var(--accent);
+      margin-bottom: 0.35rem;
+    }
+
+    .report-header__title {
+      font-size: 1.5rem;
+      font-weight: 700;
+      color: var(--text);
+    }
+
+    .report-header__meta {
+      font-size: 0.85rem;
+      color: var(--muted);
+      margin-top: 0.25rem;
+    }
+
+    /* ── Panels ──────────────────────────────────────────────────────────── */
+    .panel {
+      background: var(--surface);
+      border: 1px solid var(--border);
+      border-radius: var(--radius);
+      padding: 1.5rem;
+      margin-bottom: 1.5rem;
+    }
+
+    .panel__label {
+      font-size: 0.78rem;
+      font-weight: 700;
+      text-transform: uppercase;
+      letter-spacing: 0.07em;
+      color: var(--muted);
+      margin-bottom: 1rem;
+    }
+
+    /* ── Commentary ──────────────────────────────────────────────────────── */
+    .commentary {
+      border-left: 3px solid var(--accent);
+    }
+
+    .commentary .panel__label {
+      color: var(--accent);
+    }
+
+    .commentary-body {
+      line-height: 1.8;
+      font-size: 0.95rem;
+      color: var(--text);
+    }
+
+    .commentary-body p { margin-bottom: 0.85rem; }
+    .commentary-body p:last-child { margin-bottom: 0; }
+    .commentary-body strong { font-weight: 600; }
+    .commentary-body em { color: var(--muted); }
+
+    /* ── Outliers ────────────────────────────────────────────────────────── */
+    .outlier-list {
+      list-style: none;
+      display: flex;
+      flex-direction: column;
+      gap: 0.4rem;
+    }
+
+    .outlier-list li {
+      font-size: 0.875rem;
+      color: var(--muted);
+    }
+
+    .outlier-list li strong {
+      color: var(--text);
+    }
+
+    /* ── Footer ──────────────────────────────────────────────────────────── */
+    .report-footer {
+      font-size: 0.8rem;
+      color: var(--muted);
+      text-align: center;
+      border-top: 1px solid var(--border);
+      padding-top: 1rem;
+      margin-top: 0.5rem;
+    }
+  </style>
+</head>
+<body>
+<div class="report-wrapper">
+
+  {# ── Header ──────────────────────────────────────────────────────────── #}
+  <div class="report-header">
+    <div class="report-header__brand">YNAB Financial Report</div>
+    <div class="report-header__title">{{ budget_name }} &mdash; {{ snapshot.month }}</div>
+    <div class="report-header__meta">Generated {{ snapshot.generated_at[:10] }}</div>
+  </div>
+
+  {# ── AI Commentary ───────────────────────────────────────────────────── #}
+  {% if commentary_html %}
+  <div class="panel commentary">
+    <div class="panel__label">AI Commentary</div>
+    <div class="commentary-body">{{ commentary_html | safe }}</div>
+  </div>
+  {% endif %}
+
+  {# ── 12-month trend chart ─────────────────────────────────────────────── #}
+  {% if trend_chart_json %}
+  <div class="panel">
+    <div class="panel__label">Income vs Spending &mdash; 12-Month Trend</div>
+    <div id="trend-chart"></div>
+  </div>
+  {% endif %}
+
+  {# ── Category breakdown chart ─────────────────────────────────────────── #}
+  {% if category_chart_json %}
+  <div class="panel">
+    <div class="panel__label">Spending by Category &mdash; {{ snapshot.month }}</div>
+    <div id="category-chart"></div>
+  </div>
+  {% endif %}
+
+  {# ── Outliers ─────────────────────────────────────────────────────────── #}
+  {% if outliers %}
+  <div class="panel">
+    <div class="panel__label">Outlier Months Excluded from Averages</div>
+    <ul class="outlier-list">
+      {% for o in outliers %}
+      <li>
+        <strong>{{ o.category_name }}</strong> &mdash;
+        {{ o.month }}: {{ o.amount_milliunit | milliunit_to_dollars }}
+        (unusually high; excluded from IQR-adjusted average)
+      </li>
+      {% endfor %}
+    </ul>
+  </div>
+  {% endif %}
+
+  <div class="report-footer">
+    Exported from YNAB Financial Report &bull; {{ snapshot.generated_at[:10] }}
+  </div>
+
+</div>
+
+{# ── Plotly ───────────────────────────────────────────────────────────── #}
+{% if trend_chart_json or category_chart_json %}
+<script src="https://cdn.plot.ly/plotly-2.35.2.min.js" charset="utf-8"></script>
+<script>
+  {% if trend_chart_json %}
+  (function () {
+    var spec = {{ trend_chart_json | safe }};
+    Plotly.newPlot('trend-chart', spec.data, spec.layout, {
+      responsive: true, displayModeBar: false
+    });
+  })();
+  {% endif %}
+  {% if category_chart_json %}
+  (function () {
+    var spec = {{ category_chart_json | safe }};
+    Plotly.newPlot('category-chart', spec.data, spec.layout, {
+      responsive: true, displayModeBar: false
+    });
+  })();
+  {% endif %}
+</script>
+{% endif %}
+
+</body>
+</html>

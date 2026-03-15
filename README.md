@@ -96,12 +96,12 @@ See [AGENTS.md](AGENTS.md) for full security requirements applied to this codeba
 ## Roadmap
 
 - [x] Core architecture and documentation
-- [ ] Settings UI with encrypted secret storage
-- [ ] YNAB sync pipeline
-- [ ] Personal profile wizard
-- [ ] Dashboard with Plotly charts
-- [ ] AI commentary and report snapshots
-- [ ] Historical report browser and PDF/HTML export
+- [x] Settings UI with encrypted secret storage
+- [x] YNAB sync pipeline
+- [x] Personal profile wizard
+- [x] Dashboard with Plotly charts
+- [x] AI commentary and report snapshots
+- [x] Historical report browser and PDF/HTML export
 - [ ] Email delivery
 - [ ] Automated monthly scheduler
 - [ ] Notion sync

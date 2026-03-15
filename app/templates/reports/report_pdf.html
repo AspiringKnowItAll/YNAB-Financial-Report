@@ -1,0 +1,247 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <title>{{ budget_name }} — {{ snapshot.month }} Financial Report</title>
+  <style>
+    /* ── Reset & base ─────────────────────────────────────────────────── */
+    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+    @page {
+      size: A4;
+      margin: 2cm 2.2cm;
+    }
+
+    body {
+      font-family: "Helvetica Neue", Helvetica, Arial, sans-serif;
+      background: #ffffff;
+      color: #1a1a2e;
+      font-size: 11pt;
+      line-height: 1.55;
+    }
+
+    /* ── Header ──────────────────────────────────────────────────────── */
+    .report-header {
+      border-bottom: 2px solid #1a1a2e;
+      padding-bottom: 0.75rem;
+      margin-bottom: 1.5rem;
+    }
+
+    .report-header__brand {
+      font-size: 8pt;
+      font-weight: 700;
+      text-transform: uppercase;
+      letter-spacing: 0.1em;
+      color: #4a5075;
+      margin-bottom: 0.2rem;
+    }
+
+    .report-header__title {
+      font-size: 18pt;
+      font-weight: 700;
+      color: #1a1a2e;
+    }
+
+    .report-header__meta {
+      font-size: 9pt;
+      color: #6b7280;
+      margin-top: 0.15rem;
+    }
+
+    /* ── Section headings ────────────────────────────────────────────── */
+    .section-title {
+      font-size: 9pt;
+      font-weight: 700;
+      text-transform: uppercase;
+      letter-spacing: 0.07em;
+      color: #4a5075;
+      border-bottom: 1px solid #d1d5db;
+      padding-bottom: 0.25rem;
+      margin-bottom: 0.75rem;
+      margin-top: 1.5rem;
+    }
+
+    .section-title:first-of-type {
+      margin-top: 0;
+    }
+
+    /* ── AI commentary ───────────────────────────────────────────────── */
+    .commentary {
+      background: #f8f9ff;
+      border-left: 3px solid #4a6cf7;
+      padding: 0.85rem 1rem;
+      margin-bottom: 1.5rem;
+      border-radius: 3px;
+    }
+
+    .commentary-label {
+      font-size: 8pt;
+      font-weight: 700;
+      text-transform: uppercase;
+      letter-spacing: 0.07em;
+      color: #4a6cf7;
+      margin-bottom: 0.5rem;
+    }
+
+    .commentary-body {
+      font-size: 10.5pt;
+      line-height: 1.65;
+      color: #1a1a2e;
+    }
+
+    .commentary-body p { margin-bottom: 0.6rem; }
+    .commentary-body p:last-child { margin-bottom: 0; }
+    .commentary-body strong { font-weight: 600; }
+    .commentary-body em { color: #4a5075; }
+
+    /* ── Tables ──────────────────────────────────────────────────────── */
+    table {
+      width: 100%;
+      border-collapse: collapse;
+      font-size: 10pt;
+      margin-bottom: 1rem;
+    }
+
+    thead th {
+      background: #f3f4f6;
+      color: #4a5075;
+      font-size: 8.5pt;
+      font-weight: 700;
+      text-transform: uppercase;
+      letter-spacing: 0.05em;
+      padding: 0.45rem 0.6rem;
+      text-align: left;
+      border-bottom: 1px solid #d1d5db;
+    }
+
+    thead th.num { text-align: right; }
+
+    tbody tr:nth-child(even) { background: #f9fafb; }
+
+    tbody td {
+      padding: 0.4rem 0.6rem;
+      border-bottom: 1px solid #e5e7eb;
+      color: #1a1a2e;
+      vertical-align: middle;
+    }
+
+    td.num { text-align: right; font-variant-numeric: tabular-nums; }
+
+    td.positive { color: #15803d; }
+    td.negative { color: #b91c1c; }
+
+    /* ── Outliers ────────────────────────────────────────────────────── */
+    .outlier-list {
+      list-style: none;
+      display: flex;
+      flex-direction: column;
+      gap: 0.3rem;
+    }
+
+    .outlier-list li {
+      font-size: 9.5pt;
+      color: #4a5075;
+    }
+
+    .outlier-list li strong {
+      color: #1a1a2e;
+    }
+
+    /* ── Footer ──────────────────────────────────────────────────────── */
+    .report-footer {
+      font-size: 8pt;
+      color: #9ca3af;
+      text-align: center;
+      border-top: 1px solid #e5e7eb;
+      padding-top: 0.75rem;
+      margin-top: 2rem;
+    }
+  </style>
+</head>
+<body>
+
+  {# ── Header ────────────────────────────────────────────────────────── #}
+  <div class="report-header">
+    <div class="report-header__brand">YNAB Financial Report</div>
+    <div class="report-header__title">{{ budget_name }} &mdash; {{ snapshot.month }}</div>
+    <div class="report-header__meta">Generated {{ snapshot.generated_at[:10] }}</div>
+  </div>
+
+  {# ── AI Commentary ─────────────────────────────────────────────────── #}
+  {% if commentary_html %}
+  <div class="commentary">
+    <div class="commentary-label">AI Commentary</div>
+    <div class="commentary-body">{{ commentary_html | safe }}</div>
+  </div>
+  {% endif %}
+
+  {# ── 12-Month Income vs Spending Trend ─────────────────────────────── #}
+  {% if trend_table %}
+  <div class="section-title">Income vs Spending &mdash; 12-Month Trend</div>
+  <table>
+    <thead>
+      <tr>
+        <th>Month</th>
+        <th class="num">Income</th>
+        <th class="num">Spending</th>
+        <th class="num">Net</th>
+      </tr>
+    </thead>
+    <tbody>
+      {% for row in trend_table %}
+      <tr>
+        <td>{{ row.month }}</td>
+        <td class="num">{{ row.income | format_dollars }}</td>
+        <td class="num">{{ row.spending | format_dollars }}</td>
+        <td class="num {% if row.net >= 0 %}positive{% else %}negative{% endif %}">
+          {{ row.net | format_dollars }}
+        </td>
+      </tr>
+      {% endfor %}
+    </tbody>
+  </table>
+  {% endif %}
+
+  {# ── Category Breakdown ────────────────────────────────────────────── #}
+  {% if category_table %}
+  <div class="section-title">Spending by Category &mdash; {{ snapshot.month }}</div>
+  <table>
+    <thead>
+      <tr>
+        <th>Category</th>
+        <th class="num">This Month</th>
+        <th class="num">IQR-Adjusted Avg</th>
+      </tr>
+    </thead>
+    <tbody>
+      {% for row in category_table %}
+      <tr>
+        <td>{{ row.name }}</td>
+        <td class="num">{{ row.amount | format_dollars }}</td>
+        <td class="num">{{ row.average | format_dollars }}</td>
+      </tr>
+      {% endfor %}
+    </tbody>
+  </table>
+  {% endif %}
+
+  {# ── Outlier Months ────────────────────────────────────────────────── #}
+  {% if outliers %}
+  <div class="section-title">Outlier Months Excluded from Averages</div>
+  <ul class="outlier-list">
+    {% for o in outliers %}
+    <li>
+      <strong>{{ o.category_name }}</strong> &mdash;
+      {{ o.month }}: {{ o.amount_milliunit | milliunit_to_dollars }}
+      (unusually high; excluded from IQR-adjusted average)
+    </li>
+    {% endfor %}
+  </ul>
+  {% endif %}
+
+  <div class="report-footer">
+    Exported from YNAB Financial Report &bull; {{ snapshot.generated_at[:10] }}
+  </div>
+
+</body>
+</html>
