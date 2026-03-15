@@ -198,7 +198,7 @@ YNAB-Financial-Report/
 │   │   ├── settings.py           # GET/POST /settings
 │   │   ├── setup.py              # GET/POST /setup
 │   │   ├── reports.py            # GET /reports, /reports/{id}
-│   │   ├── api.py                # POST /api/sync/trigger, test endpoints
+│   │   ├── api.py                # POST /api/sync/trigger, /api/report/generate, /api/report/email/{id}, test endpoints
 │   │   └── export.py             # GET /export/{id}/pdf|html
 │   ├── templates/
 │   └── static/
@@ -318,7 +318,7 @@ Outlier exclusions must be stored in `report_snapshots.outliers_excluded` (JSON 
 | 5 — Dashboard | Complete | 12-month trend chart, category breakdown with IQR-adjusted averages, sync status bar, net worth |
 | 6 — AI Reports | Complete | AI provider abstraction (Anthropic/OpenAI/OpenRouter/Ollama), report snapshots, /reports list + detail, /api/report/generate, /api/test/ai |
 | 7 — Export | Complete | PDF/HTML export via WeasyPrint; standalone HTML with interactive Plotly charts |
-| 8 — Email | Pending | SMTP delivery |
+| 8 — Email | Complete | SMTP delivery via aiosmtplib; email_service.py, /api/report/email/{id}, /api/test/smtp, Email Report button on report detail |
 | 9 — Scheduler + Notion | Pending | Automated runs, Notion sync |
 | 10 — Tests + Hardening | Pending | Test suite, error handling, full docs |
 

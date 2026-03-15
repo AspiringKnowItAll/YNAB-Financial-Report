@@ -110,6 +110,17 @@ async def get_report_page(request: Request, report_id: int, db: AsyncSession = D
     budget = result.scalar_one_or_none()
     budget_name = budget.name if budget else "Your Budget"
 
+    # Email configured: enabled + host + both addresses present
+    result = await db.execute(select(AppSettings).where(AppSettings.id == 1))
+    settings = result.scalar_one_or_none()
+    email_configured = bool(
+        settings
+        and settings.email_enabled
+        and settings.smtp_host
+        and settings.smtp_from_email
+        and settings.report_to_email
+    )
+
     return templates.TemplateResponse("reports/report_detail.html", {
         "request": request,
         "snapshot": snapshot,
@@ -118,4 +129,5 @@ async def get_report_page(request: Request, report_id: int, db: AsyncSession = D
         "category_chart_json": category_chart_json,
         "outliers": outliers,
         "commentary_html": commentary_html,
+        "email_configured": email_configured,
     })

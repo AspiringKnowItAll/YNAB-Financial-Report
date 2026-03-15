@@ -2,13 +2,14 @@
 Internal API routes — machine-readable endpoints for triggering actions
 and checking integration health from the Settings UI.
 
-POST /api/sync/trigger       → Manually trigger a YNAB sync
-POST /api/report/generate    → Manually trigger report generation for a month
-POST /api/test/ynab          → Test YNAB API connectivity
-POST /api/test/ai            → Test AI provider connectivity
-POST /api/test/smtp          → Test SMTP connectivity
+POST /api/sync/trigger           → Manually trigger a YNAB sync
+POST /api/report/generate        → Manually trigger report generation for a month
+POST /api/report/email/{id}      → Email a report snapshot via SMTP
+POST /api/test/ynab              → Test YNAB API connectivity
+POST /api/test/ai                → Test AI provider connectivity
+POST /api/test/smtp              → Test SMTP connectivity
 
-Phases 3–8 as each feature is built.
+Phases 3–8.
 """
 
 import httpx
@@ -237,12 +238,106 @@ async def test_ai(request: Request, db: AsyncSession = Depends(get_db)):
 
 
 # ---------------------------------------------------------------------------
-# SMTP test (Phase 8)
+# SMTP connection test
 # ---------------------------------------------------------------------------
 
 @router.post("/test/smtp")
-async def test_smtp():
-    return JSONResponse(
-        {"status": "not_implemented", "message": "SMTP test coming in Phase 8."},
-        status_code=501,
+async def test_smtp(request: Request, db: AsyncSession = Depends(get_db)):
+    """Verify SMTP connectivity by connecting and authenticating (no email sent)."""
+    settings = await _get_settings(db)
+
+    if not settings or not settings.smtp_host:
+        return JSONResponse(
+            {"status": "error", "message": "SMTP host is not configured."},
+            status_code=400,
+        )
+
+    master_key = request.app.state.master_key
+
+    try:
+        from app.services.email_service import test_smtp_connection
+        await test_smtp_connection(settings, master_key)
+        return JSONResponse({
+            "status": "success",
+            "message": f"Connected to {settings.smtp_host}:{settings.smtp_port} successfully.",
+        })
+    except RuntimeError as exc:
+        return JSONResponse({"status": "error", "message": str(exc)}, status_code=400)
+    except Exception as exc:
+        return JSONResponse(
+            {"status": "error", "message": f"SMTP connection failed: {exc}"},
+            status_code=502,
+        )
+
+
+# ---------------------------------------------------------------------------
+# Email report delivery
+# ---------------------------------------------------------------------------
+
+@router.post("/report/email/{report_id}")
+async def email_report(
+    request: Request,
+    report_id: int,
+    db: AsyncSession = Depends(get_db),
+):
+    """
+    Send a report snapshot by email.
+
+    Renders the email HTML body and attaches a PDF, then delivers via
+    the user-configured SMTP server. Requires email_enabled=True in Settings.
+    """
+    from app.models.budget import Budget
+    from app.models.report import ReportSnapshot
+    from app.services.email_service import build_report_email_html, send_report_email
+    from app.services.export_service import render_pdf
+
+    settings = await _get_settings(db)
+
+    if not settings:
+        return JSONResponse(
+            {"status": "error", "message": "Settings are not configured."},
+            status_code=400,
+        )
+    if not settings.email_enabled:
+        return JSONResponse(
+            {"status": "error", "message": "Email delivery is not enabled in Settings."},
+            status_code=400,
+        )
+
+    # Load snapshot
+    result = await db.execute(
+        select(ReportSnapshot).where(ReportSnapshot.id == report_id)
     )
+    snapshot = result.scalar_one_or_none()
+    if snapshot is None:
+        return JSONResponse(
+            {"status": "error", "message": f"Report #{report_id} does not exist."},
+            status_code=404,
+        )
+
+    # Budget name
+    result = await db.execute(select(Budget).where(Budget.id == snapshot.budget_id))
+    budget = result.scalar_one_or_none()
+    budget_name = budget.name if budget else "Your Budget"
+
+    master_key = request.app.state.master_key
+
+    try:
+        html_body = build_report_email_html(budget_name, snapshot)
+        pdf_bytes = await render_pdf(snapshot, budget_name)
+        subject = f"YNAB Financial Report \u2014 {budget_name} \u2014 {snapshot.month}"
+        await send_report_email(
+            settings=settings,
+            master_key=master_key,
+            subject=subject,
+            html_body=html_body,
+            pdf_attachment=pdf_bytes,
+        )
+        return JSONResponse({"status": "success", "message": "Report emailed successfully."})
+    except RuntimeError as exc:
+        return JSONResponse({"status": "error", "message": str(exc)}, status_code=400)
+    except Exception as exc:
+        return JSONResponse(
+            {"status": "error", "message": f"Email delivery failed: {exc}"},
+            status_code=502,
+        )

@@ -179,6 +179,13 @@
        style="padding: 0.5rem 1rem; font-size: 0.875rem;">
       Export PDF
     </a>
+    {% if email_configured %}
+    <button class="btn btn--secondary"
+            style="padding: 0.5rem 1rem; font-size: 0.875rem;"
+            onclick="emailReport()">
+      Email Report
+    </button>
+    {% endif %}
     <button class="btn btn--secondary"
             style="padding: 0.5rem 1rem; font-size: 0.875rem;"
             onclick="regenerateReport()">
@@ -256,6 +263,32 @@
 {% endif %}
 
 <script>
+  async function emailReport() {
+    const btn = document.querySelector('[onclick="emailReport()"]');
+    btn.disabled = true;
+    btn.textContent = 'Sending\u2026';
+
+    try {
+      const res = await fetch('/api/report/email/{{ snapshot.id }}', { method: 'POST' });
+      const data = await res.json();
+      if (data.status === 'success') {
+        btn.textContent = 'Sent!';
+        setTimeout(() => {
+          btn.disabled = false;
+          btn.textContent = 'Email Report';
+        }, 3000);
+      } else {
+        alert('Email failed: ' + (data.message || 'Unknown error'));
+        btn.disabled = false;
+        btn.textContent = 'Email Report';
+      }
+    } catch (e) {
+      alert('Request failed. Check your connection.');
+      btn.disabled = false;
+      btn.textContent = 'Email Report';
+    }
+  }
+
   async function regenerateReport() {
     const month = '{{ snapshot.month }}';
     const btn = document.querySelector('[onclick="regenerateReport()"]');
