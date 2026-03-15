@@ -16,7 +16,7 @@
 
   <h1 style="font-size: 1.5rem; margin-bottom: 0.5rem;">Settings</h1>
   <p class="text-muted" style="margin-bottom: 1.75rem;">
-    Configure your YNAB connection, AI provider, email delivery, automated schedule, and Notion sync.
+    Configure your YNAB connection, AI provider, email, automated schedule, and Notion sync.
     Secret fields are never displayed — submitting a blank secret field leaves the
     existing value unchanged.
   </p>
@@ -55,17 +55,24 @@
 
       <div class="form-group">
         <label for="ynab_api_key">Personal access token<span class="required-mark">*</span></label>
-        {% if has_ynab_key %}
-          <p class="text-muted" style="margin-bottom:0.4rem;">
-            Current value: <span class="secret-badge">••••••••</span>
-          </p>
-        {% endif %}
         <input type="password" id="ynab_api_key" name="ynab_api_key"
                autocomplete="off" maxlength="512"
+               {% if has_ynab_key %}class="field-configured"{% endif %}
                placeholder="{% if has_ynab_key %}Leave blank to keep existing key{% else %}Paste your YNAB personal access token{% endif %}">
         <div class="field-hint">
           Found at <em>YNAB → My Account → Developer Settings → Personal Access Tokens</em>.
+          {% if has_ynab_key %}<span style="color:var(--success);">&#10003; Key configured.</span>{% endif %}
         </div>
+      </div>
+
+      <div style="margin-top:0.5rem; margin-bottom:1.25rem;">
+        <button type="button" id="btn-test-ynab"
+                style="background:var(--surface); border:1px solid var(--border); color:var(--text);
+                       padding:0.55rem 1.1rem; border-radius:var(--radius); font-size:0.9rem;
+                       font-weight:500; cursor:pointer;">
+          Test connection
+        </button>
+        <div id="ynab-status" style="margin-top:0.75rem; font-size:0.875rem;"></div>
       </div>
 
       {# Hidden fields carry the selected budget ID and name in the form POST #}
@@ -85,24 +92,8 @@
           </option>
           {% endif %}
         </select>
-        <div class="field-hint">Test the connection above to refresh the budget list.</div>
+        <div class="field-hint">Test the connection to refresh the budget list.</div>
       </div>
-
-      <div style="display:flex; gap:0.75rem; flex-wrap:wrap; margin-top:0.5rem;">
-        <button type="button" id="btn-test-ynab"
-                style="background:var(--surface); border:1px solid var(--border); color:var(--text);
-                       padding:0.55rem 1.1rem; border-radius:var(--radius); font-size:0.9rem;
-                       font-weight:500; cursor:pointer;">
-          Test connection &amp; load budgets
-        </button>
-        <button type="button" id="btn-sync-now"
-                style="background:var(--surface); border:1px solid var(--border); color:var(--text);
-                       padding:0.55rem 1.1rem; border-radius:var(--radius); font-size:0.9rem;
-                       font-weight:500; cursor:pointer;">
-          Sync now
-        </button>
-      </div>
-      <div id="ynab-status" style="margin-top:0.75rem; font-size:0.875rem;"></div>
     </div>
 
     <!-- ================================================================
@@ -130,22 +121,14 @@
       </div>
 
       <div class="form-group">
-        <label for="ai_model">Model name</label>
-        <input type="text" id="ai_model" name="ai_model"
-               value="{{ settings.ai_model or '' }}" maxlength="128"
-               placeholder="e.g. claude-sonnet-4-6, gpt-4o, llama3">
-      </div>
-
-      <div class="form-group">
         <label for="ai_api_key">API key</label>
-        {% if has_ai_key %}
-          <p class="text-muted" style="margin-bottom:0.4rem;">
-            Current value: <span class="secret-badge">••••••••</span>
-          </p>
-        {% endif %}
         <input type="password" id="ai_api_key" name="ai_api_key"
                autocomplete="off" maxlength="512"
                placeholder="{% if has_ai_key %}Leave blank to keep existing key{% else %}Provider API key (not needed for Ollama){% endif %}">
+        <div class="field-hint">
+          Not required for Ollama.
+          {% if has_ai_key %}<span style="color:var(--success);">&#10003; Key configured.</span>{% endif %}
+        </div>
       </div>
 
       <div class="form-group">
@@ -156,28 +139,43 @@
         <div class="field-hint">Leave blank for Anthropic and OpenAI.</div>
       </div>
 
-      <div style="margin-top:0.5rem;">
+      <div style="margin-top:0.5rem; margin-bottom:1.25rem;">
         <button type="button" id="btn-test-ai"
                 style="background:var(--surface); border:1px solid var(--border); color:var(--text);
                        padding:0.55rem 1.1rem; border-radius:var(--radius); font-size:0.9rem;
                        font-weight:500; cursor:pointer;">
-          Test AI connection
+          Test connection
         </button>
+        <div id="ai-status" style="margin-top:0.75rem; font-size:0.875rem;"></div>
       </div>
-      <div id="ai-status" style="margin-top:0.75rem; font-size:0.875rem;"></div>
+
+      <div class="form-group combobox-wrap">
+        <label for="ai_model">Model name<span class="required-mark">*</span></label>
+        <input type="text" id="ai_model" name="ai_model"
+               value="{{ settings.ai_model or '' }}" maxlength="128"
+               placeholder="e.g. claude-sonnet-4-6, gpt-4o, llama3"
+               autocomplete="off">
+        <span class="combobox-chevron" id="ai-model-chevron"></span>
+        <div id="ai-model-dropdown" class="combobox-dropdown"></div>
+        <div class="field-hint">Test the connection to load available models, or type a model name manually.</div>
+      </div>
     </div>
 
     <!-- ================================================================
-         Email / SMTP
+         Email Settings
     ================================================================= -->
     <div class="card" style="margin-bottom: 1.5rem;">
-      <div class="section-header" style="margin-top:0;">Email Delivery</div>
+      <div class="section-header" style="margin-top:0;">Email Settings <span class="text-muted">(optional)</span></div>
+
+      <p class="text-muted" style="margin-bottom:1.25rem;">
+        Configure SMTP to receive reports by email when generated automatically or on demand.
+      </p>
 
       <div class="form-group">
         <label class="checkbox-label">
           <input type="checkbox" name="email_enabled" value="1"
                  {% if settings.email_enabled %}checked{% endif %}>
-          Enable email delivery of monthly reports
+          Enable email
         </label>
       </div>
 
@@ -203,14 +201,12 @@
 
       <div class="form-group">
         <label for="smtp_password">SMTP password</label>
-        {% if has_smtp_password %}
-          <p class="text-muted" style="margin-bottom:0.4rem;">
-            Current value: <span class="secret-badge">••••••••</span>
-          </p>
-        {% endif %}
         <input type="password" id="smtp_password" name="smtp_password"
                autocomplete="off" maxlength="512"
                placeholder="{% if has_smtp_password %}Leave blank to keep existing password{% else %}SMTP password{% endif %}">
+        {% if has_smtp_password %}
+        <div class="field-hint"><span style="color:var(--success);">&#10003; Password configured.</span></div>
+        {% endif %}
       </div>
 
       <div class="form-group">
@@ -238,7 +234,7 @@
                 style="background:var(--surface); border:1px solid var(--border); color:var(--text);
                        padding:0.55rem 1.1rem; border-radius:var(--radius); font-size:0.9rem;
                        font-weight:500; cursor:pointer;">
-          Test SMTP connection
+          Test connection
         </button>
       </div>
       <div id="smtp-status" style="margin-top:0.75rem; font-size:0.875rem;"></div>
@@ -348,7 +344,7 @@
                    {% if settings.schedule_send_email %}checked{% endif %}>
             Automatically email the report after generation
           </label>
-          <div class="field-hint">Requires email delivery to be enabled and configured above.</div>
+          <div class="field-hint">Requires email to be enabled and configured above.</div>
         </div>
 
       </div>{# /schedule-fields #}
@@ -370,14 +366,12 @@
 
       <div class="form-group">
         <label for="notion_token">Notion integration token</label>
-        {% if has_notion_token %}
-          <p class="text-muted" style="margin-bottom:0.4rem;">
-            Current value: <span class="secret-badge">••••••••</span>
-          </p>
-        {% endif %}
         <input type="password" id="notion_token" name="notion_token"
                autocomplete="off" maxlength="512"
                placeholder="{% if has_notion_token %}Leave blank to keep existing token{% else %}secret_...{% endif %}">
+        {% if has_notion_token %}
+        <div class="field-hint"><span style="color:var(--success);">&#10003; Token configured.</span></div>
+        {% endif %}
       </div>
 
       <div class="form-group">
@@ -401,14 +395,16 @@
     el.style.color = color || 'var(--text)';
   }
 
-  function apiPost(url, btn, loadingText, callback) {
+  function apiPost(url, btn, loadingText, callback, body) {
     var original = btn.textContent;
     btn.disabled = true;
     btn.textContent = loadingText;
-    fetch(url, { method: 'POST', headers: { 'X-Requested-With': 'XMLHttpRequest' } })
+    var opts = { method: 'POST', headers: { 'X-Requested-With': 'XMLHttpRequest' } };
+    if (body) { opts.body = body; }
+    fetch(url, opts)
       .then(function(r) { return r.json(); })
       .then(function(data) { callback(data); })
-      .catch(function() { setYnabStatus('Network error — could not reach the server.', 'var(--danger)'); })
+      .catch(function() { callback({ status: 'error', message: 'Network error — could not reach the server.' }); })
       .finally(function() { btn.disabled = false; btn.textContent = original; });
   }
 
@@ -429,21 +425,123 @@
     });
   });
 
-  // AI provider test
+  // AI provider test + model combobox
   function setAiStatus(msg, color) {
     var el = document.getElementById('ai-status');
     el.textContent = msg;
     el.style.color = color || 'var(--text)';
   }
 
+  var aiModels = [];   // Full list from the provider
+  var aiInput = document.getElementById('ai_model');
+  var aiDropdown = document.getElementById('ai-model-dropdown');
+  var highlightIdx = -1;
+
+  function openDropdown() {
+    aiDropdown.classList.add('open');
+  }
+
+  function closeDropdown() {
+    aiDropdown.classList.remove('open');
+  }
+
+  function renderModelDropdown(filter, showAll) {
+    var query = (!showAll && filter) ? filter.toLowerCase() : '';
+    var matches = aiModels.filter(function(m) {
+      return !query || m.toLowerCase().indexOf(query) !== -1;
+    });
+    aiDropdown.innerHTML = '';
+    highlightIdx = -1;
+    if (!matches.length) { closeDropdown(); return; }
+    matches.forEach(function(m) {
+      var div = document.createElement('div');
+      div.className = 'combobox-option';
+      div.textContent = m;
+      div.addEventListener('mousedown', function(e) {
+        e.preventDefault();  // Prevent blur from firing before click
+        aiInput.value = m;
+        closeDropdown();
+        aiInput.classList.remove('field-invalid');
+      });
+      aiDropdown.appendChild(div);
+    });
+    openDropdown();
+  }
+
+  aiInput.addEventListener('input', function() {
+    if (aiModels.length) renderModelDropdown(this.value, false);
+  });
+
+  aiInput.addEventListener('focus', function() {
+    if (aiModels.length) renderModelDropdown('', true);
+  });
+
+  aiInput.addEventListener('blur', function() {
+    // Small delay so mousedown on an option fires first
+    setTimeout(function() { closeDropdown(); }, 150);
+  });
+
+  aiInput.addEventListener('keydown', function(e) {
+    var items = aiDropdown.querySelectorAll('.combobox-option');
+    if (!items.length) return;
+    if (e.key === 'ArrowDown') {
+      e.preventDefault();
+      highlightIdx = Math.min(highlightIdx + 1, items.length - 1);
+    } else if (e.key === 'ArrowUp') {
+      e.preventDefault();
+      highlightIdx = Math.max(highlightIdx - 1, 0);
+    } else if (e.key === 'Enter' && highlightIdx >= 0) {
+      e.preventDefault();
+      aiInput.value = items[highlightIdx].textContent;
+      closeDropdown();
+      aiInput.classList.remove('field-invalid');
+      return;
+    } else if (e.key === 'Escape') {
+      closeDropdown();
+      return;
+    } else {
+      return;
+    }
+    items.forEach(function(el, i) {
+      el.classList.toggle('highlighted', i === highlightIdx);
+    });
+    items[highlightIdx].scrollIntoView({ block: 'nearest' });
+  });
+
+  // Toggle dropdown on chevron click — always show full list
+  document.getElementById('ai-model-chevron').addEventListener('mousedown', function(e) {
+    e.preventDefault();
+    if (aiDropdown.classList.contains('open')) {
+      closeDropdown();
+    } else if (aiModels.length) {
+      aiInput.focus();
+      renderModelDropdown('', true);
+    }
+  });
+
   document.getElementById('btn-test-ai').addEventListener('click', function() {
+    var formData = new FormData();
+    formData.append('ai_provider', document.getElementById('ai_provider').value);
+    formData.append('ai_api_key', document.getElementById('ai_api_key').value);
+    formData.append('ai_base_url', document.getElementById('ai_base_url').value);
+
     apiPost('/api/test/ai', this, 'Testing\u2026', function(data) {
       if (data.status === 'success') {
-        setAiStatus(data.message, 'var(--success)');
+        aiModels = data.models || [];
+        if (aiModels.length) {
+          renderModelDropdown('', true);
+          setAiStatus(
+            data.message + ' ' + aiModels.length + ' model' +
+            (aiModels.length === 1 ? '' : 's') + ' available \u2014 select below.',
+            'var(--success)'
+          );
+        } else {
+          setAiStatus(data.message, 'var(--success)');
+        }
       } else {
         setAiStatus('Error: ' + data.message, 'var(--danger)');
       }
-    });
+    }, formData);
   });
 
   // Scheduler field visibility
@@ -467,7 +565,7 @@
   document.getElementById('schedule_frequency').addEventListener('change', updateFrequencyFields);
 
   document.getElementById('btn-test-ynab').addEventListener('click', function() {
-    apiPost('/api/test/ynab', this, 'Loading\u2026', function(data) {
+    apiPost('/api/test/ynab', this, 'Testing\u2026', function(data) {
       if (data.status === 'success') {
         var currentId = document.getElementById('ynab_budget_id').value;
         var select = document.getElementById('budget-select');
@@ -520,19 +618,26 @@
     document.getElementById('ynab_budget_name').value = selected ? selected.textContent : '';
   });
 
-  document.getElementById('btn-sync-now').addEventListener('click', function() {
-    setYnabStatus('Syncing\u2026 this may take a moment.', 'var(--muted)');
-    apiPost('/api/sync/trigger', this, 'Syncing\u2026', function(data) {
-      if (data.status === 'success') {
-        setYnabStatus(
-          'Sync complete. Added: ' + data.transactions_added +
-          ', updated: ' + data.transactions_updated + '.',
-          'var(--success)'
-        );
-      } else {
-        setYnabStatus('Sync failed: ' + data.message, 'var(--danger)');
-      }
+  // Required-field blur validation — highlight red when empty
+  function setupBlurValidation(id, allowBlankWhenSaved) {
+    var el = document.getElementById(id);
+    if (!el) return;
+    el.addEventListener('blur', function() {
+      if (allowBlankWhenSaved) return;  // existing value saved, blank is OK
+      var empty = (el.tagName === 'SELECT') ? !el.value : !el.value.trim();
+      el.classList.toggle('field-invalid', empty);
     });
-  });
+    // Clear the red border as soon as the user starts typing / selects a value
+    el.addEventListener('input', function() {
+      if (el.value.trim()) el.classList.remove('field-invalid');
+    });
+    el.addEventListener('change', function() {
+      if (el.value) el.classList.remove('field-invalid');
+    });
+  }
+
+  setupBlurValidation('ynab_api_key', {{ 'true' if has_ynab_key else 'false' }});
+  setupBlurValidation('ai_provider', false);
+  setupBlurValidation('ai_model', false);
 </script>
 {% endblock %}

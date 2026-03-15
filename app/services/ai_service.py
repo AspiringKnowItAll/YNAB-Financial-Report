@@ -30,6 +30,10 @@ class AIProvider(Protocol):
         """Return True if the provider is reachable and the key is valid."""
         ...
 
+    async def list_models(self) -> list[str]:
+        """Return available model IDs sorted alphabetically."""
+        ...
+
 
 # ---------------------------------------------------------------------------
 # Anthropic implementation
@@ -64,6 +68,13 @@ class AnthropicProvider:
         except Exception:
             return False
 
+    async def list_models(self) -> list[str]:
+        """Return available model IDs sorted alphabetically."""
+        from anthropic import AsyncAnthropic
+        client = AsyncAnthropic(api_key=self._api_key)
+        models = await client.models.list(limit=100)
+        return sorted(m.id for m in models.data)
+
 
 # ---------------------------------------------------------------------------
 # OpenAI-compatible implementation (OpenAI, OpenRouter, Ollama)
@@ -75,10 +86,12 @@ class OpenAIProvider:
         self._model = model
         self._base_url = base_url
 
-    async def generate(self, system: str, user: str, max_tokens: int) -> str:
+    def _client(self):
         from openai import AsyncOpenAI
-        client = AsyncOpenAI(api_key=self._api_key or "ollama", base_url=self._base_url)
-        response = await client.chat.completions.create(
+        return AsyncOpenAI(api_key=self._api_key or "ollama", base_url=self._base_url)
+
+    async def generate(self, system: str, user: str, max_tokens: int) -> str:
+        response = await self._client().chat.completions.create(
             model=self._model,
             max_tokens=max_tokens,
             messages=[
@@ -90,9 +103,7 @@ class OpenAIProvider:
 
     async def health_check(self) -> bool:
         try:
-            from openai import AsyncOpenAI
-            client = AsyncOpenAI(api_key=self._api_key or "ollama", base_url=self._base_url)
-            await client.chat.completions.create(
+            await self._client().chat.completions.create(
                 model=self._model,
                 max_tokens=1,
                 messages=[{"role": "user", "content": "ping"}],
@@ -101,10 +112,47 @@ class OpenAIProvider:
         except Exception:
             return False
 
+    async def list_models(self) -> list[str]:
+        """Return available model IDs sorted alphabetically."""
+        response = await self._client().models.list()
+        return sorted(m.id for m in response.data)
+
 
 # ---------------------------------------------------------------------------
 # Factory
 # ---------------------------------------------------------------------------
+
+def get_ai_provider_from_params(
+    provider_name: str,
+    api_key: str = "",
+    base_url: str | None = None,
+) -> AIProvider:
+    """
+    Build an AIProvider directly from plaintext parameters (no DB / encryption).
+
+    Used by the Settings UI test button so the user can test connectivity
+    before saving settings.
+    """
+    model = "ping"  # Placeholder — only used for health_check, not list_models
+
+    if provider_name == "anthropic":
+        if not api_key:
+            raise ValueError("Anthropic API key is required.")
+        return AnthropicProvider(api_key=api_key, model=model)
+
+    if provider_name in ("openai", "openrouter", "ollama"):
+        if not api_key and provider_name != "ollama":
+            raise ValueError(f"{provider_name.capitalize()} API key is required.")
+        if provider_name in ("openrouter", "ollama") and not base_url:
+            raise ValueError(f"{provider_name.capitalize()} base URL is required.")
+        return OpenAIProvider(
+            api_key=api_key,
+            model=model,
+            base_url=base_url if provider_name in ("openrouter", "ollama") else None,
+        )
+
+    raise ValueError(f"Unknown AI provider: {provider_name!r}.")
+
 
 def get_ai_provider(settings: AppSettings, master_key: bytes) -> AIProvider:
     """

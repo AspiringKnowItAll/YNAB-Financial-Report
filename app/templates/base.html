@@ -109,8 +109,23 @@
       transition: border-color 0.15s;
     }
 
+    select {
+      appearance: none;
+      -webkit-appearance: none;
+      padding-right: 2.2rem;
+      background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='10' height='6'%3E%3Cpath d='M0 0l5 6 5-6z' fill='%237b80a0'/%3E%3C/svg%3E");
+      background-repeat: no-repeat;
+      background-position: right 0.85rem center;
+      background-size: 10px 6px;
+      cursor: pointer;
+    }
+
     input:focus, select:focus, textarea:focus {
       border-color: var(--accent);
+    }
+
+    input.field-invalid, select.field-invalid {
+      border-color: var(--danger);
     }
 
     input[type="checkbox"] {
@@ -238,6 +253,63 @@
       color: var(--danger);
       margin-left: 0.15em;
       font-weight: 700;
+    }
+
+    /* Combobox wrapper — makes the input look like a native select */
+    .combobox-wrap {
+      position: relative;
+    }
+
+    .combobox-wrap input {
+      padding-right: 2.2rem;
+      cursor: text;
+    }
+
+    .combobox-chevron {
+      position: absolute;
+      right: 0.85rem;
+      top: 50%;
+      transform: translateY(-50%);
+      pointer-events: auto;
+      cursor: pointer;
+      user-select: none;
+      width: 10px;
+      height: 6px;
+      background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='10' height='6'%3E%3Cpath d='M0 0l5 6 5-6z' fill='%237b80a0'/%3E%3C/svg%3E");
+      background-repeat: no-repeat;
+      background-size: 10px 6px;
+    }
+
+    /* Combobox dropdown (filterable model selector) */
+    .combobox-dropdown {
+      display: none;
+      position: absolute;
+      left: 0;
+      right: 0;
+      z-index: 10;
+      max-height: 240px;
+      overflow-y: auto;
+      margin-top: 4px;
+      background: var(--bg);
+      border: 1px solid var(--border);
+      border-radius: var(--radius);
+      box-shadow: var(--shadow);
+    }
+
+    .combobox-dropdown.open {
+      display: block;
+    }
+
+    .combobox-option {
+      padding: 0.6rem 0.85rem;
+      font-size: 0.95rem;
+      color: var(--text);
+      cursor: pointer;
+    }
+
+    .combobox-option:hover,
+    .combobox-option.highlighted {
+      background: var(--surface);
     }
 
     /* Secret placeholder badge */

@@ -119,12 +119,13 @@ async def post_settings(
         try:
             ai = AiSettingsUpdate(
                 ai_provider=ai_provider,
-                ai_model=ai_model,
+                ai_model=ai_model.strip() or None,
                 ai_api_key=ai_api_key or None,
                 ai_base_url=ai_base_url or None,
             )
             settings.ai_provider = ai.ai_provider
-            settings.ai_model = ai.ai_model
+            if ai.ai_model:
+                settings.ai_model = ai.ai_model
             if ai.ai_api_key:
                 settings.ai_api_key_enc = encrypt(ai.ai_api_key, master_key)
             settings.ai_base_url = str(ai.ai_base_url) if ai.ai_base_url else None
@@ -213,7 +214,8 @@ async def post_settings(
         return templates.TemplateResponse(request, "settings/settings.html", context, status_code=422)
 
     # Mark settings complete if minimum required fields are present
-    if settings.ynab_api_key_enc and settings.ynab_budget_id and settings.ai_provider:
+    if (settings.ynab_api_key_enc and settings.ynab_budget_id
+            and settings.ai_provider and settings.ai_model):
         settings.settings_complete = True
 
     await db.commit()
@@ -249,6 +251,8 @@ def _missing_requirements(settings: AppSettings) -> list[str]:
         missing.append("YNAB budget selection")
     if not settings.ai_provider:
         missing.append("AI provider")
+    if not settings.ai_model:
+        missing.append("AI model")
     return missing
 
 

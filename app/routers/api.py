@@ -202,34 +202,47 @@ async def test_ynab(request: Request, db: AsyncSession = Depends(get_db)):
 
 @router.post("/test/ai")
 async def test_ai(request: Request, db: AsyncSession = Depends(get_db)):
-    """Verify the configured AI provider is reachable and the key is valid."""
-    settings = await _get_settings(db)
+    """
+    Verify AI provider connectivity and return available models.
 
-    if not settings or not settings.ai_provider:
+    Accepts provider config directly from the form so the user can test
+    before saving settings. Falls back to a previously-saved API key if
+    the form field is left blank (existing key placeholder).
+    """
+    form = await request.form()
+    provider_name = (form.get("ai_provider") or "").strip()
+    api_key = (form.get("ai_api_key") or "").strip()
+    base_url = (form.get("ai_base_url") or "").strip() or None
+
+    if not provider_name:
         return JSONResponse(
-            {"status": "error", "message": "AI provider is not configured."},
+            {"status": "error", "message": "Select an AI provider first."},
             status_code=400,
         )
 
-    master_key = request.app.state.master_key
+    # If no API key was typed, fall back to the saved (encrypted) key
+    if not api_key:
+        settings = await _get_settings(db)
+        if settings and settings.ai_api_key_enc:
+            master_key = request.app.state.master_key
+            try:
+                api_key = decrypt(settings.ai_api_key_enc, master_key)
+            except ValueError as exc:
+                return JSONResponse({"status": "error", "message": str(exc)}, status_code=400)
 
     try:
-        from app.services.ai_service import get_ai_provider
-        provider = get_ai_provider(settings, master_key)
+        from app.services.ai_service import get_ai_provider_from_params
+        provider = get_ai_provider_from_params(provider_name, api_key, base_url)
     except ValueError as exc:
         return JSONResponse({"status": "error", "message": str(exc)}, status_code=400)
 
     try:
-        ok = await provider.health_check()
-        if ok:
-            return JSONResponse({
-                "status": "success",
-                "message": f"Connected to {settings.ai_provider} successfully.",
-            })
-        return JSONResponse(
-            {"status": "error", "message": "AI provider returned an unexpected response."},
-            status_code=400,
-        )
+        models = await provider.list_models()
+        return JSONResponse({
+            "status": "success",
+            "message": f"Connected to {provider_name} successfully.",
+            "models": models,
+        })
     except Exception as exc:
         return JSONResponse(
             {"status": "error", "message": f"AI provider test failed: {exc}"},

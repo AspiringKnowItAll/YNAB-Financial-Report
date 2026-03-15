@@ -19,7 +19,7 @@ class AiSettingsUpdate(BaseModel):
     """Validated input for the AI provider section of the Settings form."""
 
     ai_provider: Literal["anthropic", "openai", "openrouter", "ollama"]
-    ai_model: str = Field(min_length=1, max_length=128)
+    ai_model: str | None = Field(default=None, max_length=128)
     ai_api_key: str | None = Field(default=None, max_length=512)
     ai_base_url: AnyHttpUrl | None = None
 
