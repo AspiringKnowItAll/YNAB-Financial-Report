@@ -30,9 +30,18 @@
   </div>
   {% endif %}
 
-  {% if saved %}
+  {% if saved and not missing %}
   <div class="alert alert--success" style="margin-bottom: 1.5rem;">
     Settings saved successfully.
+  </div>
+  {% endif %}
+
+  {% if missing %}
+  <div class="alert alert--warning" style="margin-bottom: 1.5rem;">
+    <strong>Settings saved, but the following are still required before you can continue:</strong>
+    <ul style="margin: 0.5rem 0 0 1.25rem; padding: 0;">
+      {% for item in missing %}<li>{{ item }}</li>{% endfor %}
+    </ul>
   </div>
   {% endif %}
 
@@ -45,7 +54,7 @@
       <div class="section-header" style="margin-top:0;">YNAB</div>
 
       <div class="form-group">
-        <label for="ynab_api_key">Personal access token</label>
+        <label for="ynab_api_key">Personal access token<span class="required-mark">*</span></label>
         {% if has_ynab_key %}
           <p class="text-muted" style="margin-bottom:0.4rem;">
             Current value: <span class="secret-badge">••••••••</span>
@@ -68,7 +77,7 @@
       {# Budget selector — hidden until a successful connection test populates it #}
       <div class="form-group" id="budget-selector-group"
            style="{% if not settings.ynab_budget_id %}display:none;{% endif %}">
-        <label for="budget-select">Budget</label>
+        <label for="budget-select">Budget<span class="required-mark">*</span></label>
         <select id="budget-select">
           {% if settings.ynab_budget_id %}
           <option value="{{ settings.ynab_budget_id }}" selected>
@@ -103,7 +112,7 @@
       <div class="section-header" style="margin-top:0;">AI Provider</div>
 
       <div class="form-group">
-        <label for="ai_provider">Provider</label>
+        <label for="ai_provider">Provider<span class="required-mark">*</span></label>
         <select id="ai_provider" name="ai_provider">
           <option value="">— select —</option>
           {% for val, label in [
@@ -146,6 +155,16 @@
                placeholder="e.g. http://localhost:11434/v1">
         <div class="field-hint">Leave blank for Anthropic and OpenAI.</div>
       </div>
+
+      <div style="margin-top:0.5rem;">
+        <button type="button" id="btn-test-ai"
+                style="background:var(--surface); border:1px solid var(--border); color:var(--text);
+                       padding:0.55rem 1.1rem; border-radius:var(--radius); font-size:0.9rem;
+                       font-weight:500; cursor:pointer;">
+          Test AI connection
+        </button>
+      </div>
+      <div id="ai-status" style="margin-top:0.75rem; font-size:0.875rem;"></div>
     </div>
 
     <!-- ================================================================
@@ -406,6 +425,23 @@
         setSmtpStatus(data.message, 'var(--success)');
       } else {
         setSmtpStatus('Error: ' + data.message, 'var(--danger)');
+      }
+    });
+  });
+
+  // AI provider test
+  function setAiStatus(msg, color) {
+    var el = document.getElementById('ai-status');
+    el.textContent = msg;
+    el.style.color = color || 'var(--text)';
+  }
+
+  document.getElementById('btn-test-ai').addEventListener('click', function() {
+    apiPost('/api/test/ai', this, 'Testing\u2026', function(data) {
+      if (data.status === 'success') {
+        setAiStatus(data.message, 'var(--success)');
+      } else {
+        setAiStatus('Error: ' + data.message, 'var(--danger)');
       }
     });
   });

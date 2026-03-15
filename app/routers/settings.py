@@ -222,7 +222,34 @@ async def post_settings(
     from app.scheduler import reschedule_job
     reschedule_job(settings, request.app)
 
+    # If settings are still incomplete, show the page with a warning listing
+    # exactly which required fields are missing (instead of a silent redirect loop).
+    if not settings.settings_complete:
+        missing = _missing_requirements(settings)
+        context = {
+            "settings": settings,
+            "has_ynab_key": bool(settings.ynab_api_key_enc),
+            "has_ai_key": bool(settings.ai_api_key_enc),
+            "has_smtp_password": bool(settings.smtp_password_enc),
+            "has_notion_token": bool(settings.notion_token_enc),
+            "saved": True,
+            "missing": missing,
+        }
+        return templates.TemplateResponse(request, "settings/settings.html", context)
+
     return RedirectResponse("/settings?saved=1", status_code=302)
+
+
+def _missing_requirements(settings: AppSettings) -> list[str]:
+    """Return human-readable names of required settings that are still empty."""
+    missing: list[str] = []
+    if not settings.ynab_api_key_enc:
+        missing.append("YNAB personal access token")
+    if not settings.ynab_budget_id:
+        missing.append("YNAB budget selection")
+    if not settings.ai_provider:
+        missing.append("AI provider")
+    return missing
 
 
 def _collect_errors(exc: Exception, errors: list[str], section: str) -> None:
