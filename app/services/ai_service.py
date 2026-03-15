@@ -9,13 +9,12 @@ Supported providers:
   "openai"      → OpenAI SDK (gpt-4o, etc.)
   "openrouter"  → OpenAI-compatible (ai_base_url = https://openrouter.ai/api/v1)
   "ollama"      → OpenAI-compatible (ai_base_url = http://localhost:11434/v1)
-
-Implemented in Phase 6.
 """
 
 from typing import Protocol
 
 from app.models.settings import AppSettings
+from app.services.encryption import decrypt
 
 
 # ---------------------------------------------------------------------------
@@ -33,7 +32,7 @@ class AIProvider(Protocol):
 
 
 # ---------------------------------------------------------------------------
-# Concrete implementations (stubbed — implemented in Phase 6)
+# Anthropic implementation
 # ---------------------------------------------------------------------------
 
 class AnthropicProvider:
@@ -42,11 +41,33 @@ class AnthropicProvider:
         self._model = model
 
     async def generate(self, system: str, user: str, max_tokens: int) -> str:
-        raise NotImplementedError
+        from anthropic import AsyncAnthropic
+        client = AsyncAnthropic(api_key=self._api_key)
+        response = await client.messages.create(
+            model=self._model,
+            max_tokens=max_tokens,
+            system=system,
+            messages=[{"role": "user", "content": user}],
+        )
+        return response.content[0].text
 
     async def health_check(self) -> bool:
-        raise NotImplementedError
+        try:
+            from anthropic import AsyncAnthropic
+            client = AsyncAnthropic(api_key=self._api_key)
+            await client.messages.create(
+                model=self._model,
+                max_tokens=1,
+                messages=[{"role": "user", "content": "ping"}],
+            )
+            return True
+        except Exception:
+            return False
 
+
+# ---------------------------------------------------------------------------
+# OpenAI-compatible implementation (OpenAI, OpenRouter, Ollama)
+# ---------------------------------------------------------------------------
 
 class OpenAIProvider:
     def __init__(self, api_key: str, model: str, base_url: str | None = None) -> None:
@@ -55,10 +76,30 @@ class OpenAIProvider:
         self._base_url = base_url
 
     async def generate(self, system: str, user: str, max_tokens: int) -> str:
-        raise NotImplementedError
+        from openai import AsyncOpenAI
+        client = AsyncOpenAI(api_key=self._api_key or "ollama", base_url=self._base_url)
+        response = await client.chat.completions.create(
+            model=self._model,
+            max_tokens=max_tokens,
+            messages=[
+                {"role": "system", "content": system},
+                {"role": "user", "content": user},
+            ],
+        )
+        return response.choices[0].message.content or ""
 
     async def health_check(self) -> bool:
-        raise NotImplementedError
+        try:
+            from openai import AsyncOpenAI
+            client = AsyncOpenAI(api_key=self._api_key or "ollama", base_url=self._base_url)
+            await client.chat.completions.create(
+                model=self._model,
+                max_tokens=1,
+                messages=[{"role": "user", "content": "ping"}],
+            )
+            return True
+        except Exception:
+            return False
 
 
 # ---------------------------------------------------------------------------
@@ -75,6 +116,48 @@ def get_ai_provider(settings: AppSettings, master_key: bytes) -> AIProvider:
         master_key: From app.state.master_key — used to decrypt the API key.
 
     Raises:
-        ValueError: If ai_provider is not set or is not a recognised value.
+        ValueError: If ai_provider is not set or is not a recognised value,
+                    or if a required API key is missing.
     """
-    raise NotImplementedError
+    provider = settings.ai_provider
+    model = settings.ai_model
+
+    if not provider:
+        raise ValueError("AI provider is not configured. Set it in Settings.")
+
+    if not model:
+        # Provide sensible defaults per provider
+        _defaults = {
+            "anthropic": "claude-sonnet-4-6",
+            "openai": "gpt-4o",
+            "openrouter": "openai/gpt-4o",
+            "ollama": "llama3",
+        }
+        model = _defaults.get(provider, "gpt-4o")
+
+    if provider == "anthropic":
+        if not settings.ai_api_key_enc:
+            raise ValueError("Anthropic API key is not configured.")
+        api_key = decrypt(settings.ai_api_key_enc, master_key)
+        return AnthropicProvider(api_key=api_key, model=model)
+
+    if provider in ("openai", "openrouter", "ollama"):
+        # Ollama does not require an API key
+        api_key = ""
+        if settings.ai_api_key_enc:
+            api_key = decrypt(settings.ai_api_key_enc, master_key)
+        elif provider != "ollama":
+            raise ValueError(f"{provider.capitalize()} API key is not configured.")
+
+        base_url: str | None = None
+        if provider in ("openrouter", "ollama"):
+            if not settings.ai_base_url:
+                raise ValueError(f"{provider.capitalize()} base URL is not configured.")
+            base_url = settings.ai_base_url
+
+        return OpenAIProvider(api_key=api_key, model=model, base_url=base_url)
+
+    raise ValueError(
+        f"Unknown AI provider: {provider!r}. "
+        "Must be one of: anthropic, openai, openrouter, ollama."
+    )

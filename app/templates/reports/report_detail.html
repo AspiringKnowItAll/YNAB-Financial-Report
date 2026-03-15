@@ -1,0 +1,280 @@
+{% extends "base.html" %}
+
+{% block title %}Report {{ snapshot.month }} — {{ budget_name }}{% endblock %}
+
+{% block extra_head %}
+<style>
+  .page-body {
+    max-width: 1100px;
+    margin: 0 auto;
+    padding: 1.5rem;
+  }
+
+  .page-header {
+    display: flex;
+    align-items: baseline;
+    justify-content: space-between;
+    flex-wrap: wrap;
+    gap: 0.75rem;
+    margin-bottom: 1.5rem;
+  }
+
+  .page-header__title {
+    font-size: 1.3rem;
+    font-weight: 700;
+    color: var(--text);
+  }
+
+  .page-header__meta {
+    color: var(--muted);
+    font-size: 0.85rem;
+  }
+
+  /* Chart panels */
+  .chart-panel {
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: var(--radius);
+    padding: 1.25rem;
+    margin-bottom: 1.5rem;
+  }
+
+  .chart-panel__title {
+    font-size: 0.85rem;
+    font-weight: 700;
+    text-transform: uppercase;
+    letter-spacing: 0.05em;
+    color: var(--muted);
+    margin-bottom: 1rem;
+  }
+
+  /* AI commentary */
+  .commentary-panel {
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-left: 3px solid var(--accent);
+    border-radius: var(--radius);
+    padding: 1.5rem;
+    margin-bottom: 1.5rem;
+  }
+
+  .commentary-panel__header {
+    display: flex;
+    align-items: center;
+    gap: 0.5rem;
+    margin-bottom: 1rem;
+  }
+
+  .commentary-panel__title {
+    font-size: 0.85rem;
+    font-weight: 700;
+    text-transform: uppercase;
+    letter-spacing: 0.05em;
+    color: var(--accent);
+  }
+
+  .commentary-panel__body {
+    color: var(--text);
+    line-height: 1.75;
+    font-size: 0.95rem;
+  }
+
+  .commentary-panel__body p { margin-bottom: 0.85rem; }
+  .commentary-panel__body p:last-child { margin-bottom: 0; }
+  .commentary-panel__body strong { font-weight: 600; }
+  .commentary-panel__body em { font-style: italic; color: var(--muted); }
+
+  /* Outliers */
+  .outlier-panel {
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: var(--radius);
+    padding: 1.25rem;
+    margin-bottom: 1.5rem;
+  }
+
+  .outlier-panel__title {
+    font-size: 0.85rem;
+    font-weight: 700;
+    text-transform: uppercase;
+    letter-spacing: 0.05em;
+    color: var(--muted);
+    margin-bottom: 0.75rem;
+  }
+
+  .outlier-list {
+    list-style: none;
+    padding: 0;
+    margin: 0;
+    display: flex;
+    flex-direction: column;
+    gap: 0.4rem;
+  }
+
+  .outlier-list li {
+    font-size: 0.875rem;
+    color: var(--muted);
+  }
+
+  .outlier-list li strong {
+    color: var(--text);
+  }
+
+  /* Actions bar */
+  .actions-bar {
+    display: flex;
+    gap: 0.75rem;
+    flex-wrap: wrap;
+    margin-bottom: 1.5rem;
+  }
+
+  .btn--secondary {
+    background: transparent;
+    color: var(--accent);
+    border: 1px solid var(--accent);
+  }
+
+  .btn--secondary:hover {
+    background: rgba(108,143,255,0.08);
+  }
+</style>
+{% endblock %}
+
+{% block nav %}
+<nav class="navbar">
+  <span class="navbar__brand">YNAB Financial Report</span>
+  <div class="navbar__links">
+    <a href="/">Dashboard</a>
+    <a href="/reports">Reports</a>
+    <a href="/settings">Settings</a>
+    <a href="/setup">Profile</a>
+  </div>
+</nav>
+{% endblock %}
+
+{% block content %}
+<div class="page-body">
+
+  {# ── Page header ──────────────────────────────────────────────── #}
+  <div class="page-header">
+    <div>
+      <span class="page-header__title">{{ budget_name }} &mdash; {{ snapshot.month }}</span>
+    </div>
+    <div class="page-header__meta">
+      Generated {{ snapshot.generated_at[:10] }}
+    </div>
+  </div>
+
+  {# ── Actions ──────────────────────────────────────────────────── #}
+  <div class="actions-bar">
+    <a href="/reports" class="btn btn--secondary"
+       style="padding: 0.5rem 1rem; font-size: 0.875rem;">
+      &larr; All Reports
+    </a>
+    <a href="/export/{{ snapshot.id }}/pdf" class="btn btn--secondary"
+       style="padding: 0.5rem 1rem; font-size: 0.875rem;">
+      Export PDF
+    </a>
+    <button class="btn btn--secondary"
+            style="padding: 0.5rem 1rem; font-size: 0.875rem;"
+            onclick="regenerateReport()">
+      Regenerate
+    </button>
+  </div>
+
+  {# ── AI Commentary ─────────────────────────────────────────────── #}
+  {% if commentary_html %}
+  <div class="commentary-panel">
+    <div class="commentary-panel__header">
+      <span class="commentary-panel__title">AI Commentary</span>
+    </div>
+    <div class="commentary-panel__body">
+      {{ commentary_html | safe }}
+    </div>
+  </div>
+  {% endif %}
+
+  {# ── 12-month trend chart ──────────────────────────────────────── #}
+  {% if trend_chart_json %}
+  <div class="chart-panel">
+    <div class="chart-panel__title">Income vs Spending &mdash; 12-Month Trend</div>
+    <div id="trend-chart"></div>
+  </div>
+  {% endif %}
+
+  {# ── Category breakdown chart ──────────────────────────────────── #}
+  {% if category_chart_json %}
+  <div class="chart-panel">
+    <div class="chart-panel__title">Spending by Category &mdash; {{ snapshot.month }}</div>
+    <div id="category-chart"></div>
+  </div>
+  {% endif %}
+
+  {# ── Outlier note ──────────────────────────────────────────────── #}
+  {% if outliers %}
+  <div class="outlier-panel">
+    <div class="outlier-panel__title">Outlier Months Excluded from Averages</div>
+    <ul class="outlier-list">
+      {% for o in outliers %}
+      <li>
+        <strong>{{ o.category_name }}</strong> &mdash;
+        {{ o.month }}: {{ o.amount_milliunit | milliunit_to_dollars }}
+        (unusually high; excluded from IQR-adjusted average)
+      </li>
+      {% endfor %}
+    </ul>
+  </div>
+  {% endif %}
+
+</div>
+
+{# ── Plotly ────────────────────────────────────────────────────────── #}
+{% if trend_chart_json or category_chart_json %}
+<script src="https://cdn.plot.ly/plotly-2.35.2.min.js" charset="utf-8"></script>
+<script>
+  {% if trend_chart_json %}
+  (function () {
+    var spec = {{ trend_chart_json | safe }};
+    Plotly.newPlot('trend-chart', spec.data, spec.layout, {
+      responsive: true, displayModeBar: false
+    });
+  })();
+  {% endif %}
+  {% if category_chart_json %}
+  (function () {
+    var spec = {{ category_chart_json | safe }};
+    Plotly.newPlot('category-chart', spec.data, spec.layout, {
+      responsive: true, displayModeBar: false
+    });
+  })();
+  {% endif %}
+</script>
+{% endif %}
+
+<script>
+  async function regenerateReport() {
+    const month = '{{ snapshot.month }}';
+    const btn = document.querySelector('[onclick="regenerateReport()"]');
+    btn.disabled = true;
+    btn.textContent = 'Regenerating…';
+
+    try {
+      const res = await fetch('/api/report/generate?month=' + encodeURIComponent(month), {
+        method: 'POST'
+      });
+      const data = await res.json();
+      if (data.status === 'success') {
+        window.location.href = '/reports/' + data.report_id;
+      } else {
+        alert('Regeneration failed: ' + (data.message || 'Unknown error'));
+        btn.disabled = false;
+        btn.textContent = 'Regenerate';
+      }
+    } catch (e) {
+      alert('Request failed. Check your connection.');
+      btn.disabled = false;
+      btn.textContent = 'Regenerate';
+    }
+  }
+</script>
+{% endblock %}

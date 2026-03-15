@@ -1,0 +1,280 @@
+{% extends "base.html" %}
+
+{% block title %}Reports — {{ budget_name }}{% endblock %}
+
+{% block extra_head %}
+<style>
+  .page-body {
+    max-width: 1100px;
+    margin: 0 auto;
+    padding: 1.5rem;
+  }
+
+  .page-header {
+    display: flex;
+    align-items: baseline;
+    justify-content: space-between;
+    flex-wrap: wrap;
+    gap: 0.75rem;
+    margin-bottom: 1.5rem;
+  }
+
+  .page-header__title {
+    font-size: 1.3rem;
+    font-weight: 700;
+    color: var(--text);
+  }
+
+  /* Generate form */
+  .generate-bar {
+    display: flex;
+    align-items: center;
+    gap: 0.75rem;
+    flex-wrap: wrap;
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: var(--radius);
+    padding: 1rem 1.25rem;
+    margin-bottom: 1.5rem;
+  }
+
+  .generate-bar label {
+    text-transform: none;
+    letter-spacing: normal;
+    font-size: 0.9rem;
+    color: var(--text);
+    margin-bottom: 0;
+    white-space: nowrap;
+  }
+
+  .generate-bar input[type="month"] {
+    width: auto;
+    min-width: 160px;
+  }
+
+  /* Report cards grid */
+  .reports-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fill, minmax(260px, 1fr));
+    gap: 1rem;
+  }
+
+  .report-card {
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: var(--radius);
+    padding: 1.25rem;
+    display: flex;
+    flex-direction: column;
+    gap: 0.5rem;
+    transition: border-color 0.15s;
+  }
+
+  .report-card:hover {
+    border-color: var(--accent);
+  }
+
+  .report-card__month {
+    font-size: 1.2rem;
+    font-weight: 700;
+    color: var(--text);
+  }
+
+  .report-card__meta {
+    font-size: 0.8rem;
+    color: var(--muted);
+  }
+
+  .report-card__ai-badge {
+    display: inline-block;
+    font-size: 0.72rem;
+    font-weight: 600;
+    text-transform: uppercase;
+    letter-spacing: 0.04em;
+    padding: 0.15rem 0.5rem;
+    border-radius: 4px;
+    background: rgba(108,143,255,0.15);
+    color: var(--accent);
+    border: 1px solid rgba(108,143,255,0.3);
+    width: fit-content;
+  }
+
+  .report-card__no-ai {
+    font-size: 0.8rem;
+    color: var(--muted);
+  }
+
+  .report-card__link {
+    margin-top: auto;
+    padding-top: 0.75rem;
+  }
+
+  /* Status toast */
+  #status-toast {
+    display: none;
+    position: fixed;
+    bottom: 1.5rem;
+    right: 1.5rem;
+    padding: 0.75rem 1.25rem;
+    border-radius: var(--radius);
+    font-size: 0.9rem;
+    font-weight: 500;
+    box-shadow: var(--shadow);
+    z-index: 100;
+    max-width: 360px;
+  }
+
+  #status-toast.toast--success {
+    background: rgba(76,175,130,0.18);
+    border: 1px solid rgba(76,175,130,0.5);
+    color: #7de0b0;
+  }
+
+  #status-toast.toast--error {
+    background: rgba(255,107,107,0.18);
+    border: 1px solid rgba(255,107,107,0.5);
+    color: #ff9e9e;
+  }
+
+  .empty-state {
+    text-align: center;
+    padding: 3rem 1.5rem;
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: var(--radius);
+  }
+
+  .empty-state__title {
+    font-size: 1.1rem;
+    font-weight: 600;
+    color: var(--text);
+    margin-bottom: 0.5rem;
+  }
+
+  .empty-state__body {
+    font-size: 0.9rem;
+    color: var(--muted);
+  }
+</style>
+{% endblock %}
+
+{% block nav %}
+<nav class="navbar">
+  <span class="navbar__brand">YNAB Financial Report</span>
+  <div class="navbar__links">
+    <a href="/">Dashboard</a>
+    <a href="/reports">Reports</a>
+    <a href="/settings">Settings</a>
+    <a href="/setup">Profile</a>
+  </div>
+</nav>
+{% endblock %}
+
+{% block content %}
+<div class="page-body">
+
+  <div class="page-header">
+    <div>
+      <span class="page-header__title">Monthly Reports</span>
+    </div>
+  </div>
+
+  {# ── Generate report bar ──────────────────────────────────────── #}
+  {% if budget_id %}
+  <div class="generate-bar">
+    <label for="month-picker">Generate report for:</label>
+    <input type="month" id="month-picker" name="month"
+           value="{{ reports[0].month if reports else '' }}">
+    <button class="btn btn--primary" onclick="generateReport()">
+      Generate Report
+    </button>
+    {% if not ai_configured %}
+    <span class="text-muted" style="font-size: 0.82rem;">
+      (AI provider not configured — report will include charts only)
+    </span>
+    {% endif %}
+  </div>
+  {% endif %}
+
+  {# ── Report cards ─────────────────────────────────────────────── #}
+  {% if reports %}
+  <div class="reports-grid">
+    {% for r in reports %}
+    <div class="report-card">
+      <div class="report-card__month">{{ r.month }}</div>
+      <div class="report-card__meta">
+        Generated {{ r.generated_at[:10] }}
+      </div>
+      {% if r.ai_commentary %}
+        <div class="report-card__ai-badge">AI Commentary</div>
+      {% else %}
+        <div class="report-card__no-ai">Charts only</div>
+      {% endif %}
+      <div class="report-card__link">
+        <a href="/reports/{{ r.id }}" class="btn btn--primary"
+           style="padding: 0.45rem 1rem; font-size: 0.85rem;">
+          View Report
+        </a>
+      </div>
+    </div>
+    {% endfor %}
+  </div>
+
+  {% else %}
+  <div class="empty-state">
+    <div class="empty-state__title">No reports yet</div>
+    <div class="empty-state__body">
+      Use the form above to generate your first monthly report.
+    </div>
+  </div>
+  {% endif %}
+
+</div>
+
+{# ── Status toast ─────────────────────────────────────────────────── #}
+<div id="status-toast"></div>
+
+<script>
+  async function generateReport() {
+    const month = document.getElementById('month-picker').value;
+    if (!month) {
+      showToast('Please select a month.', 'error');
+      return;
+    }
+
+    const btn = document.querySelector('.generate-bar .btn--primary');
+    const origText = btn.textContent;
+    btn.disabled = true;
+    btn.textContent = 'Generating…';
+
+    try {
+      const url = '/api/report/generate?month=' + encodeURIComponent(month);
+      const res = await fetch(url, { method: 'POST' });
+      const data = await res.json();
+
+      if (data.status === 'success') {
+        showToast('Report generated for ' + data.month + '.', 'success');
+        setTimeout(() => {
+          window.location.href = '/reports/' + data.report_id;
+        }, 800);
+      } else {
+        showToast(data.message || 'Generation failed.', 'error');
+        btn.disabled = false;
+        btn.textContent = origText;
+      }
+    } catch (e) {
+      showToast('Request failed. Check your connection.', 'error');
+      btn.disabled = false;
+      btn.textContent = origText;
+    }
+  }
+
+  function showToast(msg, type) {
+    const toast = document.getElementById('status-toast');
+    toast.textContent = msg;
+    toast.className = 'toast--' + type;
+    toast.style.display = 'block';
+    setTimeout(() => { toast.style.display = 'none'; }, 5000);
+  }
+</script>
+{% endblock %}
