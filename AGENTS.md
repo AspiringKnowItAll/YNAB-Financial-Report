@@ -320,14 +320,17 @@ Outlier exclusions must be stored in `report_snapshots.outliers_excluded` (JSON 
 | 1 — Skeleton + Docs | Complete | Project scaffolding, documentation, all stub files |
 | 2 — Auth + Settings UI | Complete | Master password setup, unlock, recovery codes, Settings page, encryption, middleware |
 | 3 — YNAB Sync | Complete | YNAB API client, sync pipeline, /api/sync/trigger, /api/test/ynab |
-| 4 — Profile Wizard | Complete | Personal context wizard (household size, income type, goals, housing, notes) |
-| 5 — Dashboard | Complete | 12-month trend chart, category breakdown with IQR-adjusted averages, sync status bar, net worth |
+| 4 — Profile Wizard | Superseded | Personal context wizard (household size, income type, goals, housing, notes) — replaced by Phase 12 Life Context Chat |
+| 5 — Dashboard | Complete (v1 scaffold) | 12-month trend chart, category breakdown with IQR-adjusted averages, sync status bar, net worth. Full redesign deferred to Phase 14 after v2 data sources are available. |
 | 6 — AI Reports | Complete | AI provider abstraction (Anthropic/OpenAI/OpenRouter/Ollama), report snapshots, /reports list + detail, /api/report/generate, /api/test/ai |
 | 7 — Export | Complete | PDF/HTML export via WeasyPrint; standalone HTML with interactive Plotly charts |
 | 8 — Email | Complete | SMTP delivery via aiosmtplib; email_service.py, /api/report/email/{id}, /api/test/smtp, Email Report button on report detail |
 | 9 — Scheduler | Complete | Configurable automated schedule (daily/weekly/biweekly/monthly/yearly); auto sync → report → email; previous or current month target; locked-app skip with error log; DB migration for new columns |
 | 10 — Tests + Hardening | Complete | pytest suite (unit + integration), TemplateResponse deprecation fix, full docs |
-| 11 — First-Run Bug Fixes | In Progress | Docker build fixes, runtime issues, UX improvements found during first real deployment |
+| 11 — First-Run Bug Fixes | Complete | Docker build fixes, runtime issues, UX improvements found during first real deployment |
+| 12 — Life Context Chat | Planned | Replace profile wizard with AI-driven chat; user tells their financial life story; AI compresses to an encrypted context block injected into reports; versioned, updateable at any time |
+| 13 — External Data Import | Planned | Upload PDF/CSV financial documents; AI normalizes to transaction records or balance snapshots; user confirms before saving; included in AI report prompt; optional YNAB account association |
+| 14 — Dashboard Redesign | Deferred | Full dashboard redesign after Phase 12 + 13 data sources are in place; will include external accounts, net worth, richer dynamic charts |
 
 ---
 
@@ -375,17 +378,66 @@ These bugs and UX gaps were discovered during the first real end-to-end run of t
 - `get_ai_provider_from_params(provider_name, api_key, base_url)` factory added to `ai_service.py`. Builds an `AIProvider` from plaintext form values without requiring a DB record or encryption. Used by `/api/test/ai`.
 
 ### Known Issues Still To Address
-- **Dashboard**: First real-world view — visual and functional review needed.
+
+None. All Phase 11 bugs are resolved. Dashboard visual review is deferred to Phase 14 (intentional — see implementation status).
 
 ---
 
-## Deferred Features (Post-v1)
+## V2 Roadmap (Phases 12–14)
 
-Do not implement these until v1 is complete and they are explicitly requested:
+These phases are planned and approved. Implementation begins after a clean v1 commit. See the plan file for full architectural detail.
 
-- **Notion sync** — `notion_service.py` stub exists; integration deferred until v1 is otherwise complete
+### Phase 12 — Life Context Chat
+
+**Goal:** Replace the profile wizard with an AI-driven conversational system that lets users build and maintain a "financial life story" — personal context the AI uses to produce more personalized, actionable reports.
+
+**How it works:**
+- User opens a chat session and talks freely with the AI about their life situation (employment, family, assets, upcoming events, goals, life changes)
+- AI uses a hidden pre-prompt at the start of every session to orient itself (what the conversation is for, what the existing context block contains)
+- At the end of the session (or on demand), the AI compresses the conversation into a structured "context block" — an efficient summary stored encrypted in the DB
+- Future sessions receive the existing context block so the AI can merge updates, retire stale items, and maintain a coherent picture over time
+- Context block is versioned; previous versions archived, current version injected into every AI report prompt
+- The pre-prompt is configurable as an advanced setting
+
+**Architectural changes:**
+- Remove `/setup` router, setup wizard templates, and `user_profile.py` ORM model
+- New DB models: `life_context_sessions` (encrypted chat history), `life_context_block` (encrypted compressed context, versioned)
+- New router + template: life context chat page (accessible from nav as "My Financial Profile" or similar)
+- Update `main.py` middleware: auth gate Step 4 (wizard check) → replaced with check for whether a context block exists
+- Update `report_service.py` to inject context block into AI prompt at report generation time
+- Context block hard limit: 5000 characters (AI compresses to fit; limit is on stored block, not on chat messages)
+
+### Phase 13 — External Data Import
+
+**Goal:** Allow users to upload PDF or CSV financial documents from any institution (bank statements, 401k statements, brokerage reports, etc.). The AI normalizes the data into a structured form that feeds into reports.
+
+**How it works:**
+- User uploads a file and optionally tells the AI which YNAB account it corresponds to
+- File content is sent to the AI with a normalization prompt
+- AI identifies the data type and normalizes:
+  - **Transaction data** → date, amount (milliunits), description, account name, optional category
+  - **Balance/snapshot data** → account name, account type, balance (milliunits), as-of date, optional fields (contribution amount, return %)
+- User reviews a confirmation preview of what was extracted before anything is saved
+- Normalized data stored in DB; included in AI report prompt at generation time
+- File size limits enforced (e.g., 10MB PDF); large files chunked and summarized
+- For Ollama users: all processing stays local — highlighted in the UI
+
+**Architectural changes:**
+- New DB models: `external_accounts`, `external_transactions`, `external_balances`
+- New router: `import_router.py` with `GET /import`, `POST /api/import/upload`, `POST /api/import/confirm`
+- New service: `import_service.py` — AI normalization logic, chunking, type detection
+- Update `report_service.py` to include external account data and transactions in the AI prompt
+- All external data stored in milliunits (same convention as YNAB data)
+
+---
+
+## Deferred Features
+
+Do not implement these until explicitly requested:
+
+- **Dashboard redesign** (Phase 14) — deferred until Phase 12 + 13 data sources are available; dashboard needs to show net worth, external accounts, and richer cross-source charts
+- **Notion sync** — `notion_service.py` stub exists; integration deferred
 - **Rolling report windows** — "last 30 days" or arbitrary date-range reports; requires pipeline redesign (currently month-based YYYY-MM only)
-- Conversational AI chat interface (ask questions about finances in real-time)
 - Per-month user annotations on reports
 - Mobile-optimized layout
 - Per-category outlier threshold configuration (user-defined IQR multiplier or fixed dollar threshold per category; currently the global Tukey 1.5×IQR fence is applied uniformly)
