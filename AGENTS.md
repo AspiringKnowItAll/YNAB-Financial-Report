@@ -328,7 +328,7 @@ Outlier exclusions must be stored in `report_snapshots.outliers_excluded` (JSON 
 | 9 — Scheduler | Complete | Configurable automated schedule (daily/weekly/biweekly/monthly/yearly); auto sync → report → email; previous or current month target; locked-app skip with error log; DB migration for new columns |
 | 10 — Tests + Hardening | Complete | pytest suite (unit + integration), TemplateResponse deprecation fix, full docs |
 | 11 — First-Run Bug Fixes | Complete | Docker build fixes, runtime issues, UX improvements found during first real deployment |
-| 12 — Life Context Chat | Planned | Replace profile wizard with AI-driven chat; user tells their financial life story; AI compresses to an encrypted context block injected into reports; versioned, updateable at any time |
+| 12 — Life Context Chat | Planned (design complete — see `docs/phase12_plan.md`) | Replace profile wizard with AI-driven chat; user tells their financial life story; AI compresses to an encrypted context block injected into reports; versioned, updateable at any time |
 | 13 — External Data Import | Planned | Upload PDF/CSV financial documents; AI normalizes to transaction records or balance snapshots; user confirms before saving; included in AI report prompt; optional YNAB account association |
 | 14 — Dashboard Redesign | Deferred | Full dashboard redesign after Phase 12 + 13 data sources are in place; will include external accounts, net worth, richer dynamic charts |
 
@@ -389,23 +389,36 @@ These phases are planned and approved. Implementation begins after a clean v1 co
 
 ### Phase 12 — Life Context Chat
 
+> **Design is complete. Full specification and confirmed decisions are in [`docs/phase12_plan.md`](docs/phase12_plan.md). Read that file before touching any Phase 12 code.**
+
 **Goal:** Replace the profile wizard with an AI-driven conversational system that lets users build and maintain a "financial life story" — personal context the AI uses to produce more personalized, actionable reports.
 
-**How it works:**
-- User opens a chat session and talks freely with the AI about their life situation (employment, family, assets, upcoming events, goals, life changes)
-- AI uses a hidden pre-prompt at the start of every session to orient itself (what the conversation is for, what the existing context block contains)
-- At the end of the session (or on demand), the AI compresses the conversation into a structured "context block" — an efficient summary stored encrypted in the DB
-- Future sessions receive the existing context block so the AI can merge updates, retire stale items, and maintain a coherent picture over time
-- Context block is versioned; previous versions archived, current version injected into every AI report prompt
-- The pre-prompt is configurable as an advanced setting
+**Confirmed design decisions (summary — see plan doc for full detail):**
+
+- **Auth gate:** Step 4 (wizard check) is removed entirely. No forced redirect based on context block. App is reachable at the dashboard once YNAB + AI provider are configured (Step 3 unchanged).
+- **Soft nudge:** Amber banner at top of dashboard when no context block exists yet.
+- **Streaming:** SSE via `fetch()` + `StreamingResponse`. `stream()` method added to `AIProvider` protocol (alongside existing `generate()`).
+- **Chat UI:** Built from scratch — custom HTML/CSS/JS floating widget. No third-party app or iframe.
+- **Session persistence:** Messages saved to DB in real time. Unended sessions reload when the widget is reopened (survive navigation/refresh). `beforeunload` warns if an uncompressed session exists.
+- **Compression trigger:** Explicit "End Chat Session" button only — not on page close.
+- **First-time intro:** Static hardcoded message + 3 clickable starter prompt chips (no API call). Returning sessions get a short AI-generated personalized opener.
+- **Widget placement:** Floating button bottom-right, dashboard page only. Slides open a right-side panel (~420px).
+- **Full profile page:** `/profile` — accessible from nav ("My Financial Profile"). Shows current context block, version history, and opens/continues chat.
+- **Pre-prompt:** Default constant in `life_context_service.py`; optional override via `life_context_pre_prompt_enc` on `AppSettings`.
+- **UserProfile removal:** `user_profile.py`, `routers/setup.py`, `schemas/setup.py`, `templates/setup/setup.html` deleted. DB table dropped via migration.
 
 **Architectural changes:**
-- Remove `/setup` router, setup wizard templates, and `user_profile.py` ORM model
-- New DB models: `life_context_sessions` (encrypted chat history), `life_context_block` (encrypted compressed context, versioned)
-- New router + template: life context chat page (accessible from nav as "My Financial Profile" or similar)
-- Update `main.py` middleware: auth gate Step 4 (wizard check) → replaced with check for whether a context block exists
-- Update `report_service.py` to inject context block into AI prompt at report generation time
-- Context block hard limit: 5000 characters (AI compresses to fit; limit is on stored block, not on chat messages)
+- Delete `app/models/user_profile.py`, `app/routers/setup.py`, `app/schemas/setup.py`, `app/templates/setup/`
+- New DB models: `LifeContextSession` (encrypted chat history), `LifeContextBlock` (encrypted compressed context, versioned) in `app/models/life_context.py`
+- New service: `app/services/life_context_service.py`
+- New router: `app/routers/life_context.py` — `/profile`, `/api/chat/session`, `/api/chat/message` (SSE), `/api/chat/end`
+- New templates: `app/templates/life_context/profile.html`
+- New JS: `app/static/js/chat_widget.js`
+- Update `app/services/ai_service.py`: add `stream()` to `AIProvider` protocol and all 4 implementations
+- Update `app/services/report_service.py`: replace `UserProfile` with `LifeContextBlock` in `_build_ai_prompt()`
+- Update `app/main.py`: remove setup router, remove Step 4 from middleware, add life_context router
+- Update `app/models/settings.py`: add `life_context_pre_prompt_enc` field
+- Context block hard limit: 5000 characters
 
 ### Phase 13 — External Data Import
 
