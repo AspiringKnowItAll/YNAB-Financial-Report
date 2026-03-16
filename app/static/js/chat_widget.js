@@ -237,8 +237,8 @@
               addChips(intro.chips);
             }
           } else {
-            // ai_opener — stream a personalized opener
-            streamOpener();
+            // ai_opener — stream a personalized opener, then show update chips
+            streamOpener(intro.chips || []);
           }
         }
       })
@@ -248,9 +248,18 @@
   }
 
   // ── Stream AI opener (returning user) ───────────────────────────────────
-  function streamOpener() {
-    var typingEl = addTypingIndicator();
+  function streamOpener(chips) {
+    addTypingIndicator();
     var bubble = null;
+    var done = false;
+
+    function finish() {
+      if (done) return;
+      done = true;
+      if (chips && chips.length) {
+        addChips(chips);
+      }
+    }
 
     fetch('/api/chat/opener', {
       method: 'POST',
@@ -267,16 +276,17 @@
 
       function pump() {
         return reader.read().then(function (result) {
-          if (result.done) return;
+          if (result.done) { finish(); return; }
           buffer += decoder.decode(result.value, { stream: true });
           var lines = buffer.split('\n');
           buffer = lines.pop();
           lines.forEach(function (line) {
             if (!line.startsWith('data: ')) return;
             var token = line.slice(6);
-            if (token === '[DONE]') return;
+            if (token === '[DONE]') { finish(); return; }
             if (token.startsWith('[ERROR]')) {
               bubble.textContent = token.slice(8);
+              finish();
               return;
             }
             bubble.textContent += token.replace(/\\n/g, '\n');
@@ -289,6 +299,7 @@
     }).catch(function () {
       removeTypingIndicator();
       addBubble('assistant', 'Hi! I\'m here to help update your financial profile. What would you like to discuss today?');
+      finish();
     });
   }
 

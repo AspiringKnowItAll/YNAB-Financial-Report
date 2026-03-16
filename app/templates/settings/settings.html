@@ -437,17 +437,38 @@
         &#9660; Advanced
       </summary>
       <div style="margin-top:1.25rem;">
+
         <div class="form-group">
-          <label for="life_context_pre_prompt">Life Context Chat — Pre-Prompt Override</label>
+          <label for="life_context_pre_prompt">Life Context Chat — Pre-Prompt</label>
+
+          {# Read-only default viewer #}
+          <details style="margin-bottom:0.75rem;">
+            <summary style="cursor:pointer; font-size:0.8rem; color:var(--muted); user-select:none;
+                            list-style:none; padding:0.35rem 0;">
+              &#9656; View built-in default pre-prompt
+            </summary>
+            <pre id="lc-default-pre-prompt"
+                 style="margin-top:0.5rem; background:var(--bg); border:1px solid var(--border);
+                        border-radius:var(--radius); padding:0.75rem 1rem; font-size:0.8rem;
+                        color:var(--muted); white-space:pre-wrap; word-break:break-word;
+                        line-height:1.55;">{{ life_context_pre_prompt_default }}</pre>
+            <button type="button" id="lc-load-default-btn"
+                    style="margin-top:0.4rem; font-size:0.8rem; padding:0.3rem 0.7rem;"
+                    class="btn btn--primary">
+              Load Default into Editor
+            </button>
+          </details>
+
           <textarea id="life_context_pre_prompt" name="life_context_pre_prompt"
-                    rows="6" maxlength="4000"
-                    placeholder="Leave blank to use the built-in default pre-prompt."></textarea>
+                    rows="10" maxlength="4000"
+                    placeholder="Using built-in default. Type here to override, or use the button above to load the default for editing.">{{ life_context_pre_prompt_value }}</textarea>
           {% if has_life_context_pre_prompt %}
-          <div class="field-hint" style="color: var(--success);">&#10003; Custom pre-prompt configured. Clear this field and save to restore the default.</div>
+          <div class="field-hint" style="color: var(--success);">&#10003; Custom pre-prompt active. Clear this field and save to revert to the built-in default.</div>
           {% else %}
-          <div class="field-hint">Optional. Overrides the default system prompt used by the Life Context Chat. Max 4000 characters.</div>
+          <div class="field-hint">Currently using the built-in default. Edit above to override, or leave blank to keep the default. Max 4000 characters.</div>
           {% endif %}
         </div>
+
       </div>
     </details>
 
@@ -879,6 +900,20 @@
       }
     }
     makeLive(toEl, validateTo);
+  })();
+
+  // ── Life context: load default into editor ──────────────────────
+  (function () {
+    var btn = document.getElementById('lc-load-default-btn');
+    if (!btn) return;
+    btn.addEventListener('click', function () {
+      var src = document.getElementById('lc-default-pre-prompt');
+      var dst = document.getElementById('life_context_pre_prompt');
+      if (src && dst) {
+        dst.value = src.textContent;
+        dst.focus();
+      }
+    });
   })();
 </script>
 {% endblock %}

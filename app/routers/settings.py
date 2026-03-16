@@ -43,9 +43,19 @@ async def _get_or_create_settings(db: AsyncSession) -> AppSettings:
 
 @router.get("/settings", response_class=HTMLResponse)
 async def get_settings(request: Request, db: AsyncSession = Depends(get_db)):
+    from app.services.life_context_service import DEFAULT_PRE_PROMPT
     settings = await _get_or_create_settings(db)
-    # Build a context dict with only non-secret values; secrets are indicated
-    # by a boolean flag so the template can show a placeholder.
+    master_key = request.app.state.master_key
+
+    # Decrypt the current pre-prompt override so the user can read and edit it.
+    # Falls back to empty string if none is set (template shows the default instead).
+    life_context_pre_prompt_value = ""
+    if settings.life_context_pre_prompt_enc:
+        try:
+            life_context_pre_prompt_value = decrypt(settings.life_context_pre_prompt_enc, master_key)
+        except Exception:
+            life_context_pre_prompt_value = ""
+
     context = {
         "settings": settings,
         "has_ynab_key": bool(settings.ynab_api_key_enc),
@@ -53,6 +63,8 @@ async def get_settings(request: Request, db: AsyncSession = Depends(get_db)):
         "has_smtp_password": bool(settings.smtp_password_enc),
         "has_notion_token": bool(settings.notion_token_enc),
         "has_life_context_pre_prompt": bool(settings.life_context_pre_prompt_enc),
+        "life_context_pre_prompt_value": life_context_pre_prompt_value,
+        "life_context_pre_prompt_default": DEFAULT_PRE_PROMPT,
         "saved": request.query_params.get("saved") == "1",
     }
     return templates.TemplateResponse(request, "settings/settings.html", context)
