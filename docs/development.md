@@ -212,11 +212,19 @@ class MyNewProvider:
         ...
 
     async def generate(self, system: str, user: str, max_tokens: int) -> str:
-        # Call the provider API and return the response text
+        # Call the provider API and return the full response text
+        ...
+
+    async def stream(self, system: str, user: str, max_tokens: int) -> AsyncIterator[str]:
+        # Stream tokens one at a time; used by Life Context Chat SSE endpoints
         ...
 
     async def health_check(self) -> bool:
         # Make a minimal test call; return True if successful
+        ...
+
+    async def list_models(self) -> list[str]:
+        # Return available model IDs sorted alphabetically
         ...
 ```
 

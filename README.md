@@ -16,6 +16,7 @@ A self-hosted financial dashboard that connects to your [YNAB](https://www.youne
 - **Tracks savings rate** and budget adherence over time
 - **Exports reports** as PDF or HTML
 - **Emails reports** to yourself via your own mail server
+- **Builds a financial life story** via an AI chat that learns your personal context and injects it into every report for more relevant, personalized advice
 - **Optionally syncs** report summaries to a Notion database
 
 Your data never leaves your machine (except to the AI provider you choose).
@@ -49,6 +50,7 @@ For a full walkthrough, see [docs/setup.md](docs/setup.md).
 | Interactive charts | Plotly-powered, in-browser charts for spending trends, savings rate, and budget vs actual |
 | Outlier handling | IQR-based statistical outlier detection removes one-time spikes from trend calculations |
 | AI insights | Works with Anthropic, OpenAI, OpenRouter, or a local Ollama instance |
+| Life Context Chat | Conversational AI chat that builds a financial life story; context is compressed and injected into every AI report |
 | Report export | Download any report as PDF or self-contained HTML |
 | Email delivery | Sends reports via your own SMTP server — no third-party email infrastructure |
 | Notion sync | Optionally posts report summaries to a Notion database |
@@ -98,15 +100,16 @@ See [AGENTS.md](AGENTS.md) for full security requirements applied to this codeba
 - [x] Core architecture and documentation
 - [x] Settings UI with encrypted secret storage
 - [x] YNAB sync pipeline
-- [x] Personal profile wizard
 - [x] Dashboard with Plotly charts
 - [x] AI commentary and report snapshots
 - [x] Historical report browser and PDF/HTML export
 - [x] Email delivery via user-configured SMTP server
 - [x] Automated scheduler (daily / weekly / biweekly / monthly / yearly)
 - [x] Test suite and hardening
+- [x] Life Context Chat — conversational AI financial life story with versioned context blocks
+- [ ] External data import (bank/investment PDFs and CSVs) *(planned)*
+- [ ] Dashboard redesign with net worth and external accounts *(planned)*
 - [ ] Notion sync *(post-v1)*
-- [ ] Conversational AI chat interface *(post-v1)*
 
 ---
 

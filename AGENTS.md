@@ -120,8 +120,9 @@ On every request, middleware checks this sequence:
 1. `/data/master.salt` does not exist → redirect to `/first-run` (master password creation)
 2. `app.state.master_key is None` → redirect to `/unlock` (app is locked)
 3. `app_settings.settings_complete = False` → redirect to `/settings`
-4. `user_profile.setup_complete = False` → redirect to `/setup`
-5. Otherwise → pass through to the requested route
+4. Otherwise → pass through to the requested route
+
+> **Note:** Step 4 (wizard check / `user_profile.setup_complete`) was removed in Phase 12. The profile wizard no longer exists. Users reach the dashboard freely once YNAB + AI provider are configured.
 
 ### App State
 
@@ -214,7 +215,7 @@ YNAB-Financial-Report/
 
 - **All monetary values are stored as YNAB milliunits** (integer, dollars × 1000). Example: $42.50 = `42500`. Conversion to display currency happens only in Jinja2 templates via a custom `milliunit_to_dollars` filter. Never store floating-point dollars.
 - **Encrypted fields** use `LargeBinary` column type in SQLAlchemy. The `encryption.py` service handles all encrypt/decrypt operations. Column names for encrypted fields end in `_enc` to make their encrypted status explicit (e.g., `ynab_api_key_enc`).
-- **Singleton tables** (`app_settings`, `user_profile`) always use `id = 1`. Upsert on that ID; never insert a second row.
+- **Singleton tables** (`app_settings`) always use `id = 1`. Upsert on that ID; never insert a second row.
 - **Soft deletes via `deleted` flag** on YNAB entities (transactions, categories, accounts) — mirror YNAB's own deletion model. Never hard-delete YNAB data rows.
 - **`sync_log`** must always have a row written at the start of a sync (status = "running") and updated at the end (status = "success" or "failed"). Never leave a sync_log row in "running" state permanently.
 
@@ -282,9 +283,12 @@ All AI functionality goes through the `AIProvider` protocol defined in `services
 ```python
 class AIProvider(Protocol):
     async def generate(self, system: str, user: str, max_tokens: int) -> str: ...
+    async def stream(self, system: str, user: str, max_tokens: int) -> AsyncIterator[str]: ...
     async def health_check(self) -> bool: ...
     async def list_models(self) -> list[str]: ...
 ```
+
+`stream()` yields tokens one at a time as they arrive from the provider. Used by the Life Context Chat SSE endpoints. `generate()` is still used for batch report generation.
 
 Supported providers and their `ai_provider` setting values:
 

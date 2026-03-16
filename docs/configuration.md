@@ -124,7 +124,7 @@ Your mail server password. For Gmail, use an [App Password](https://support.goog
 The email address that reports will be sent from. Must be a valid email format.
 
 #### To Address
-The email address to deliver reports to. Can be the same as From Address.
+The email address(es) to deliver reports to. Accepts a single address or a comma-separated list (e.g. `alice@example.com, bob@example.com`).
 
 #### Use TLS
 Whether to use TLS/STARTTLS encryption for the SMTP connection. **Strongly recommended.** Only disable if your mail server requires it.
@@ -189,6 +189,21 @@ The ID of the Notion database where report pages will be created. Found in the d
 
 ---
 
+### Advanced Settings
+
+#### Life Context Pre-Prompt
+**Optional.** Default: built-in system prompt defined in `life_context_service.py`
+
+The system prompt that guides the AI during Life Context Chat sessions. Controls what topics the AI covers, how it asks questions, and what it includes in the compressed context block.
+
+The default prompt is shown in read-only form on the Settings page (Advanced section). To customize it, click **"Load Default into Editor"** to copy the default into the editable textarea, then modify as needed and click **"Save Settings"**.
+
+To revert to the default, clear the textarea and save — an empty field restores the built-in prompt.
+
+> **Note:** Changes to the pre-prompt only affect new chat sessions. Existing context blocks are unaffected.
+
+---
+
 ## Environment Variable Summary
 
 | Variable | Where set | Required | Default | Description |
@@ -214,3 +229,4 @@ The ID of the Notion database where report pages will be created. Found in the d
 | Enable Notion | Settings UI | No | `false` | Toggle Notion sync |
 | Notion API Key | Settings UI | No | — | Notion integration token (encrypted) |
 | Notion Database ID | Settings UI | No | — | Target Notion database UUID |
+| Life Context Pre-Prompt | Settings UI (Advanced) | No | built-in | Custom system prompt for Life Context Chat sessions |

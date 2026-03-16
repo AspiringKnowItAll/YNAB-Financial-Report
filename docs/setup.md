@@ -13,8 +13,8 @@ This guide walks through a complete installation of YNAB Financial Report from s
 5. [Create Your Master Password](#5-create-your-master-password)
 6. [Save Your Recovery Codes](#6-save-your-recovery-codes)
 7. [Complete the Settings Page](#7-complete-the-settings-page)
-8. [Complete the Personal Profile Wizard](#8-complete-the-personal-profile-wizard)
-9. [Run Your First Sync](#9-run-your-first-sync)
+8. [Run Your First Sync](#8-run-your-first-sync)
+9. [Build Your Financial Profile](#9-build-your-financial-profile)
 10. [Optional: Email Setup](#10-optional-email-setup)
 11. [Optional: Notion Sync](#11-optional-notion-sync)
 12. [Keeping Your Data Safe](#12-keeping-your-data-safe)
@@ -187,27 +187,13 @@ The Settings page is where you enter your API keys and configure the app. Requir
 **Notion (optional)**
 - See [Optional: Notion Sync](#11-optional-notion-sync)
 
-Click **"Save Settings"** when done. If any required fields are missing, the page will show a warning listing exactly what still needs to be filled in. Once all required fields are set, you will be redirected to the personal profile wizard.
+Click **"Save Settings"** when done. If any required fields are missing, the page will show a warning listing exactly what still needs to be filled in. Once all required fields are set, you will be taken to the dashboard.
 
 ---
 
-## 8. Complete the Personal Profile Wizard
+## 8. Run Your First Sync
 
-The wizard collects context about your living situation so the AI can give you more relevant recommendations. You will be asked:
-
-- How many people are in your household
-- Your income type (salary, hourly, freelance, or variable)
-- Your financial goals (save an emergency fund, pay off debt, etc.)
-- Whether you rent, own, or share your home
-- Any additional context you want the AI to know about your finances
-
-Your answers are stored locally in your database and used only to personalize the AI analysis. Click **"Save and Continue"** after each step.
-
----
-
-## 9. Run Your First Sync
-
-After completing the wizard, you will be on the dashboard. Since no data has been synced yet, the dashboard will be empty.
+After saving settings, you will be on the dashboard. Since no data has been synced yet, the dashboard will be empty.
 
 To pull your data from YNAB for the first time:
 
@@ -216,6 +202,30 @@ To pull your data from YNAB for the first time:
 3. Once done, the dashboard will populate with charts and your first AI report
 
 The app will automatically sync and generate a new report on the day of the month you configured (default: the 1st of each month).
+
+---
+
+## 9. Build Your Financial Profile
+
+Once you have data on the dashboard, you can give the AI personal context about your financial life so it can produce more relevant, actionable recommendations.
+
+You will see an **amber banner** at the top of the dashboard:
+
+> "Your AI reports don't have any personal context yet. Start your financial profile →"
+
+Click the banner (or the chat button in the bottom-right corner) to open the **Life Context Chat** panel.
+
+**How it works:**
+- The AI will introduce itself and offer a few starter prompts to get the conversation going
+- Tell it about your income, household size, financial goals, debts, housing situation, or anything else relevant to your finances
+- When you're done, click **"End Chat Session"** to save your context
+- The AI compresses your chat into a concise context block (max 5,000 characters) that is stored encrypted and injected into every AI report you generate
+
+**You can update your context at any time** by opening the chat again. Previous context blocks are archived (not deleted), so you always have a history.
+
+To view your full context block and version history, go to **My Financial Profile** in the navigation bar.
+
+> **This step is optional.** AI reports will still be generated without personal context — they just won't be personalized to your situation.
 
 ---
 
