@@ -218,12 +218,16 @@
 
         if (data.is_resumed) {
           // Reload existing messages
-          document.getElementById('chat-resume-notice').style.display = '';
-          hasUncompressedSession = true;
-          endBtn.disabled = false;
           data.messages.forEach(function (m) {
             addBubble(m.role, m.content);
           });
+          // Only enable End and warn on unload if the user actually said something.
+          var hasUserMsgs = data.messages.some(function (m) { return m.role === 'user'; });
+          if (hasUserMsgs) {
+            document.getElementById('chat-resume-notice').style.display = '';
+            hasUncompressedSession = true;
+            endBtn.disabled = false;
+          }
         } else {
           // Fresh session — show intro
           var intro = data.intro;
@@ -385,13 +389,17 @@
         if (data.ok) {
           hasUncompressedSession = false;
           sessionId = null;
-          addBubble('system', 'Done! Your financial profile has been updated (v' + data.version + '). You can close this panel.');
           endBtn.disabled = true;
           sendBtn.disabled = true;
           inputEl.disabled = true;
-          // Remove the amber banner from the dashboard if present
-          var banner = document.getElementById('life-context-nudge');
-          if (banner) banner.remove();
+          if (data.empty) {
+            addBubble('system', 'Session ended. No messages were sent, so your profile was not changed.');
+          } else {
+            addBubble('system', 'Done! Your financial profile has been updated (v' + data.version + '). You can close this panel.');
+            // Remove the amber banner from the dashboard if present
+            var banner = document.getElementById('life-context-nudge');
+            if (banner) banner.remove();
+          }
         } else {
           addBubble('system', 'Something went wrong. Please try again.');
           endBtn.disabled = false;

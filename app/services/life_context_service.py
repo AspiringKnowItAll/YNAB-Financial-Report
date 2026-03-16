@@ -281,7 +281,7 @@ async def end_session(
     session: LifeContextSession,
     settings: AppSettings,
     master_key: bytes,
-) -> LifeContextBlock:
+) -> LifeContextBlock | None:
     """
     Compress the session into a new LifeContextBlock.
 
@@ -292,9 +292,21 @@ async def end_session(
     4. Persist new LifeContextBlock (version = previous + 1).
     5. Mark session ended_at + compressed_at.
 
-    Returns the new LifeContextBlock.
+    Returns the new LifeContextBlock, or None if the session had no user
+    messages (in which case the session is simply marked ended with no
+    context block update — the AI is NOT called).
     """
     messages = _decode_messages(session.messages_enc, master_key)
+
+    # Guard: never call the AI if the user never actually sent a message.
+    # An empty or assistant-only session cannot produce a meaningful context
+    # block, and asking the AI to compress nothing causes hallucination.
+    user_messages = [m for m in messages if m.get("role") == "user"]
+    if not user_messages:
+        session.ended_at = _now_iso()
+        await db.commit()
+        return None
+
     chat_history_text = _messages_to_text(messages)
 
     # Fetch existing context block

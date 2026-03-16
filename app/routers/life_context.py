@@ -235,4 +235,8 @@ async def end_session(
         master_key=master_key,
     )
 
-    return {"ok": True, "version": new_block.version}
+    if new_block is None:
+        # Session ended but had no user messages — no context block was created.
+        return {"ok": True, "version": None, "empty": True}
+
+    return {"ok": True, "version": new_block.version, "empty": False}
