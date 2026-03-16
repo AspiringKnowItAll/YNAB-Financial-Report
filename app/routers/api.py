@@ -159,20 +159,31 @@ async def trigger_report(
 
 @router.post("/test/ynab")
 async def test_ynab(request: Request, db: AsyncSession = Depends(get_db)):
-    """Verify the YNAB API key and return the list of accessible budgets."""
-    settings = await _get_settings(db)
+    """
+    Verify the YNAB API key and return the list of accessible budgets.
 
-    if not settings or not settings.ynab_api_key_enc:
+    Accepts the API key directly from the form so the user can test
+    before saving settings. Falls back to the previously-saved key if
+    the form field is left blank.
+    """
+    form = await request.form()
+    api_key = (form.get("ynab_api_key") or "").strip()
+
+    # If no key was typed, fall back to the saved (encrypted) key
+    if not api_key:
+        settings = await _get_settings(db)
+        if settings and settings.ynab_api_key_enc:
+            master_key = request.app.state.master_key
+            try:
+                api_key = decrypt(settings.ynab_api_key_enc, master_key)
+            except ValueError as exc:
+                return JSONResponse({"status": "error", "message": str(exc)}, status_code=400)
+
+    if not api_key:
         return JSONResponse(
-            {"status": "error", "message": "YNAB API key is not configured."},
+            {"status": "error", "message": "Enter a YNAB personal access token first."},
             status_code=400,
         )
-
-    master_key = request.app.state.master_key
-    try:
-        api_key = decrypt(settings.ynab_api_key_enc, master_key)
-    except ValueError as exc:
-        return JSONResponse({"status": "error", "message": str(exc)}, status_code=400)
 
     try:
         client = YnabClient(api_key)
@@ -256,26 +267,56 @@ async def test_ai(request: Request, db: AsyncSession = Depends(get_db)):
 
 @router.post("/test/smtp")
 async def test_smtp(request: Request, db: AsyncSession = Depends(get_db)):
-    """Verify SMTP connectivity by connecting and authenticating (no email sent)."""
-    settings = await _get_settings(db)
+    """
+    Verify SMTP connectivity by connecting and authenticating (no email sent).
 
-    if not settings or not settings.smtp_host:
+    Accepts SMTP fields directly from the form so the user can test
+    before saving settings. Falls back to saved values for any field
+    left blank.
+    """
+    form = await request.form()
+    settings = await _get_settings(db)
+    master_key = request.app.state.master_key
+
+    # Read from form, fall back to saved settings
+    smtp_host = (form.get("smtp_host") or "").strip() or (settings.smtp_host if settings else None)
+    smtp_port_raw = (form.get("smtp_port") or "").strip()
+    smtp_port = int(smtp_port_raw) if smtp_port_raw else (settings.smtp_port if settings else 587)
+    smtp_username = (form.get("smtp_username") or "").strip() or (settings.smtp_username if settings else None)
+    smtp_use_tls = bool(form.get("smtp_use_tls"))
+    if not form.get("smtp_use_tls") and settings:
+        smtp_use_tls = settings.smtp_use_tls
+
+    # Password: form field first, then saved encrypted value
+    smtp_password: str | None = (form.get("smtp_password") or "").strip() or None
+    if not smtp_password and settings and settings.smtp_password_enc:
+        try:
+            smtp_password = decrypt(settings.smtp_password_enc, master_key)
+        except ValueError as exc:
+            return JSONResponse({"status": "error", "message": str(exc)}, status_code=400)
+
+    if not smtp_host:
         return JSONResponse(
-            {"status": "error", "message": "SMTP host is not configured."},
+            {"status": "error", "message": "Enter an SMTP host first."},
             status_code=400,
         )
 
-    master_key = request.app.state.master_key
-
     try:
-        from app.services.email_service import test_smtp_connection
-        await test_smtp_connection(settings, master_key)
+        import aiosmtplib
+        smtp = aiosmtplib.SMTP(hostname=smtp_host, port=smtp_port)
+        await smtp.connect()
+        try:
+            if smtp_use_tls:
+                await smtp.starttls()
+            if smtp_username:
+                await smtp.login(smtp_username, smtp_password or "")
+        finally:
+            await smtp.quit()
+
         return JSONResponse({
             "status": "success",
-            "message": f"Connected to {settings.smtp_host}:{settings.smtp_port} successfully.",
+            "message": f"Connected to {smtp_host}:{smtp_port} successfully.",
         })
-    except RuntimeError as exc:
-        return JSONResponse({"status": "error", "message": str(exc)}, status_code=400)
     except Exception as exc:
         return JSONResponse(
             {"status": "error", "message": f"SMTP connection failed: {exc}"},

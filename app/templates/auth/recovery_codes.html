@@ -49,11 +49,20 @@
         </label>
       </div>
 
-      <button type="submit" class="btn btn--primary btn--block"
-              onclick="return document.getElementById('codes_saved').checked || (alert('Please confirm you have saved your recovery codes.'), false);">
+      <button type="submit" id="continue_btn" class="btn btn--primary btn--block" disabled
+              style="opacity: 0.45; cursor: not-allowed;">
         Continue to settings
       </button>
     </form>
   </div>
 </div>
+
+<script>
+  document.getElementById('codes_saved').addEventListener('change', function () {
+    var btn = document.getElementById('continue_btn');
+    btn.disabled = !this.checked;
+    btn.style.opacity = this.checked ? '1' : '0.45';
+    btn.style.cursor = this.checked ? 'pointer' : 'not-allowed';
+  });
+</script>
 {% endblock %}

@@ -120,23 +120,23 @@
         </select>
       </div>
 
-      <div class="form-group">
-        <label for="ai_api_key">API key</label>
+      <div class="form-group" id="ai-api-key-group"
+           style="{% if settings.ai_provider not in ('anthropic', 'openai', 'openrouter') %}display:none;{% endif %}">
+        <label for="ai_api_key">API key<span class="required-mark">*</span></label>
         <input type="password" id="ai_api_key" name="ai_api_key"
                autocomplete="off" maxlength="512"
-               placeholder="{% if has_ai_key %}Leave blank to keep existing key{% else %}Provider API key (not needed for Ollama){% endif %}">
+               placeholder="{% if has_ai_key %}Leave blank to keep existing key{% else %}Paste your API key{% endif %}">
         <div class="field-hint">
-          Not required for Ollama.
           {% if has_ai_key %}<span style="color:var(--success);">&#10003; Key configured.</span>{% endif %}
         </div>
       </div>
 
-      <div class="form-group">
-        <label for="ai_base_url">Base URL <span class="text-muted">(OpenRouter / Ollama)</span></label>
+      <div class="form-group" id="ai-base-url-group"
+           style="{% if settings.ai_provider not in ('openrouter', 'ollama') %}display:none;{% endif %}">
+        <label for="ai_base_url">Base URL</label>
         <input type="url" id="ai_base_url" name="ai_base_url"
                value="{{ settings.ai_base_url or '' }}" maxlength="512"
                placeholder="e.g. http://localhost:11434/v1">
-        <div class="field-hint">Leave blank for Anthropic and OpenAI.</div>
       </div>
 
       <div style="margin-top:0.5rem; margin-bottom:1.25rem;">
@@ -416,13 +416,20 @@
   }
 
   document.getElementById('btn-test-smtp').addEventListener('click', function() {
+    var formData = new FormData();
+    formData.append('smtp_host', document.getElementById('smtp_host').value);
+    formData.append('smtp_port', document.getElementById('smtp_port').value);
+    formData.append('smtp_username', document.getElementById('smtp_username').value);
+    formData.append('smtp_password', document.getElementById('smtp_password').value);
+    formData.append('smtp_use_tls', document.querySelector('input[name="smtp_use_tls"]').checked ? '1' : '');
+
     apiPost('/api/test/smtp', this, 'Testing\u2026', function(data) {
       if (data.status === 'success') {
         setSmtpStatus(data.message, 'var(--success)');
       } else {
         setSmtpStatus('Error: ' + data.message, 'var(--danger)');
       }
-    });
+    }, formData);
   });
 
   // AI provider test + model combobox
@@ -544,6 +551,39 @@
     }, formData);
   });
 
+  // AI provider change — auto-fill defaults and clear fields
+  var aiProviderDefaults = {
+    openrouter: { base_url: 'https://openrouter.ai/api/v1' },
+    ollama:     { base_url: 'http://localhost:11434/v1' }
+  };
+
+  document.getElementById('ai_provider').addEventListener('change', function() {
+    var provider = this.value;
+    var defaults = aiProviderDefaults[provider] || {};
+    var needsKey = (provider === 'anthropic' || provider === 'openai' || provider === 'openrouter');
+    var needsUrl = (provider === 'openrouter' || provider === 'ollama');
+
+    // Show/hide fields based on provider
+    document.getElementById('ai-api-key-group').style.display = needsKey ? '' : 'none';
+    document.getElementById('ai-base-url-group').style.display = needsUrl ? '' : 'none';
+
+    // Clear and auto-fill fields
+    document.getElementById('ai_api_key').value = '';
+    document.getElementById('ai_base_url').value = defaults.base_url || '';
+    document.getElementById('ai_model').value = '';
+
+    // Clear model dropdown and status
+    aiModels = [];
+    aiDropdown.innerHTML = '';
+    closeDropdown();
+    setAiStatus('', '');
+
+    // Remove any validation styling
+    this.classList.remove('field-invalid');
+    document.getElementById('ai_api_key').classList.remove('field-invalid');
+    document.getElementById('ai_model').classList.remove('field-invalid');
+  });
+
   // Scheduler field visibility
   function updateScheduleFields() {
     var enabled = document.getElementById('schedule_enabled').checked;
@@ -565,6 +605,9 @@
   document.getElementById('schedule_frequency').addEventListener('change', updateFrequencyFields);
 
   document.getElementById('btn-test-ynab').addEventListener('click', function() {
+    var formData = new FormData();
+    formData.append('ynab_api_key', document.getElementById('ynab_api_key').value);
+
     apiPost('/api/test/ynab', this, 'Testing\u2026', function(data) {
       if (data.status === 'success') {
         var currentId = document.getElementById('ynab_budget_id').value;
@@ -608,7 +651,7 @@
       } else {
         setYnabStatus('Error: ' + data.message, 'var(--danger)');
       }
-    });
+    }, formData);
   });
 
   // Keep hidden fields in sync with dropdown selection

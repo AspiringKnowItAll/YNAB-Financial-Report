@@ -1,0 +1,11 @@
+services:
+  ynab-report-test:
+    build: .
+    ports:
+      - "8083:8080"
+    volumes:
+      - ynab_data_test:/data
+    restart: unless-stopped
+
+volumes:
+  ynab_data_test:
