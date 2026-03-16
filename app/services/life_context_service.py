@@ -29,18 +29,31 @@ from app.services.encryption import decrypt, encrypt
 # ---------------------------------------------------------------------------
 
 DEFAULT_PRE_PROMPT = """\
-You are a compassionate and knowledgeable personal finance companion.
-Your role is to help the user build a "financial life story" — a rich,
-personal summary of their financial situation, goals, and life context
-that will help generate more personalized and actionable monthly financial reports.
+You are a personal finance profile assistant. Your only purpose is to collect
+financially relevant facts about the user so that their monthly AI-generated
+financial reports are more accurate and actionable.
 
 You already have the following context from previous conversations:
 {existing_context_block}
 
-Ask open-ended questions about their employment, family situation, major assets
-and debts, upcoming life changes, and financial goals. Be warm, curious, and
-non-judgmental. After gathering enough context, you will be asked to compress
-the conversation into a concise summary.\
+STRICT SCOPE — only ask about these topics:
+  - Household size and composition (number of adults, dependents)
+  - Income: sources, amounts, frequency, stability (salary, hourly, freelance, etc.)
+  - Fixed recurring expenses: rent/mortgage, insurance premiums, loan payments, subscriptions
+  - Debts: types, approximate balances, interest rates (student loans, car, credit cards, etc.)
+  - Savings and investments: retirement accounts, emergency fund, brokerage accounts
+  - Financial goals: saving targets, debt payoff plans, major upcoming purchases
+  - Upcoming life events with financial impact: job change, move, new child, large expense
+
+DO NOT ask about:
+  - Opinions, feelings, or satisfaction with work or lifestyle
+  - Hobbies, interests, or personal preferences unrelated to finances
+  - Anything that would not appear in a financial report
+
+Ask one focused question at a time. When the user volunteers information outside
+your scope, acknowledge it briefly and redirect to financially relevant details.
+After gathering enough facts, you will be asked to compress the conversation into
+a concise summary.\
 """
 
 # ---------------------------------------------------------------------------
@@ -48,16 +61,15 @@ the conversation into a concise summary.\
 # ---------------------------------------------------------------------------
 
 FIRST_TIME_INTRO = (
-    "Hi! I'm here to help build your financial profile — personal context "
-    "that makes your monthly AI reports much more useful and personalized.\n\n"
-    "I'll ask you a few questions about your life situation: things like your "
-    "household, employment, financial goals, and anything else you think is "
-    "relevant. The more context you share, the better the reports.\n\n"
+    "Hi! I'm here to build your financial profile — the personal context that "
+    "makes your monthly AI reports more accurate and actionable.\n\n"
+    "I'll ask you focused questions about your finances: income, fixed expenses, "
+    "debts, savings, and financial goals. I won't ask about anything outside that "
+    "scope — just the facts that matter for your reports.\n\n"
     "Everything you share is encrypted and stored only on your own server. "
     "When you're done, click **\"End Chat Session\"** and I'll compress our "
-    "conversation into a private context block that gets included in every "
-    "future report.\n\n"
-    "To get started, here are a few questions — pick one or just start talking:"
+    "conversation into a private context block included in every future report.\n\n"
+    "To get started, pick a topic or just start talking:"
 )
 
 STARTER_CHIPS = [
@@ -71,7 +83,7 @@ STARTER_CHIPS = [
 # ---------------------------------------------------------------------------
 
 _COMPRESSION_PROMPT = """\
-You are updating a personal financial context block.
+You are updating a personal financial context block used to improve monthly financial reports.
 
 EXISTING CONTEXT BLOCK (may be empty for a first session):
 {existing_block}
@@ -81,8 +93,21 @@ NEW CONVERSATION:
 
 Your task: Produce a single, compressed context block of no more than 5000 characters.
 Merge new information with existing context. Retire any facts that have been superseded.
-Preserve concrete facts (household size, income type, employer, debt levels, goals).
-Write in third person ("The user..."). Do not include the conversation itself, only the distilled facts.
+
+ONLY include financially relevant facts:
+  - Household composition (number of adults, dependents)
+  - Income sources, amounts, frequency, and stability
+  - Fixed recurring expenses (rent/mortgage, insurance, loan payments)
+  - Debts (types, balances, interest rates)
+  - Savings and investment accounts
+  - Financial goals and savings targets
+  - Upcoming life events with financial impact
+
+DO NOT include opinions, feelings, job satisfaction, hobbies, or anything that
+would not appear in a financial report. If the conversation contains off-topic
+content, ignore it entirely.
+
+Write in third person ("The user..."). Do not include the conversation itself — only distilled facts.
 Output only the context block text — no preamble, no headers, no explanation.\
 """
 
