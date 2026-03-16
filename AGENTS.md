@@ -343,6 +343,9 @@ These bugs and UX gaps were discovered during the first real end-to-end run of t
 - **Settings page — missing requirements**: No indication that AI provider/model were required. User could save settings without them and get silently looped back. Fixed with: red asterisks on required fields, red-on-blur validation for empty required fields, and a warning banner listing missing requirements shown only after saving incomplete settings.
 - **Settings page — AI model selector**: Model name was a free-text field with no guidance. Replaced with a combobox (type-to-filter dropdown) that populates available models from the provider when "Test connection" is clicked. Users can still type any model name manually.
 - **Settings page — AI test connectivity**: Test button read from DB, requiring a save before testing. Now reads provider/key/base URL directly from the form fields. Falls back to the saved encrypted API key if the field is blank.
+- **Settings page — YNAB test connectivity**: Same fix as AI — test button now reads the API key from the form field, falling back to the saved encrypted key if blank. No save required before testing.
+- **Settings page — SMTP test connectivity**: Same fix as AI/YNAB — test button reads all SMTP fields (host, port, username, password, TLS) from the form, falling back to saved values per field.
+- **Recovery codes page**: "Continue to settings" button was clickable before the user confirmed saving codes. Now starts disabled/greyed out and only activates when the checkbox is checked.
 
 ### Settings Page UX Improvements
 - **Layout reorder**: YNAB section: token → test button → budget dropdown. AI section: provider → key → base URL → test button → model combobox.
@@ -350,6 +353,9 @@ These bugs and UX gaps were discovered during the first real end-to-end run of t
 - **Secret field indicators**: Replaced "Current value: ●●●●●●●●" badges with subtle green "✓ Key configured." hints.
 - **Email section**: Renamed "Email Delivery" → "Email Settings (optional)" with checkbox text "Enable email" and a description line.
 - **Custom dropdown styling**: All `<select>` elements and the model combobox use a consistent custom SVG chevron arrow. Native browser arrows suppressed via `appearance: none`.
+- **AI provider conditional fields**: API key field hidden for Ollama (not needed); Base URL field hidden for Anthropic/OpenAI (not needed). Both hidden when no provider is selected. Fields reveal dynamically on provider change.
+- **AI provider auto-fill**: Selecting OpenRouter auto-fills Base URL with `https://openrouter.ai/api/v1`; selecting Ollama auto-fills `http://localhost:11434/v1`. Switching providers clears API key, Base URL, model, and status.
+- **`docker-compose.test.yml`**: Added for spinning up a clean second container (fresh `/data` volume, port 8083) to test the first-run flow without affecting the primary instance.
 
 ### New/Changed Files
 - `app/templates_config.py` — Shared Jinja2Templates instance with `milliunit_to_dollars` filter and autoescape enabled. All routers must import from here.
@@ -359,7 +365,7 @@ These bugs and UX gaps were discovered during the first real end-to-end run of t
 - `get_ai_provider_from_params(provider_name, api_key, base_url)` factory added to `ai_service.py`. Builds an `AIProvider` from plaintext form values without requiring a DB record or encryption. Used by `/api/test/ai`.
 
 ### Known Issues Still To Address
-- **First-run form**: Logs show a `422 Unprocessable Entity` on the first master password POST attempt — likely a form validation issue worth investigating.
+- **First-run form**: Logs previously showed a `422 Unprocessable Entity` on the first master password POST — not reproduced during clean test container run; may have been a transient issue. Monitor but deprioritize.
 - **Dashboard**: First real-world view — visual and functional review needed.
 
 ---
