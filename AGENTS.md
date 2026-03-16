@@ -262,6 +262,11 @@ YNAB-Financial-Report/
 | Numeric inputs (household size) | Positive integer; reasonable range (e.g., 1–20 for household size) |
 | Boolean fields | Use Pydantic `bool` — do not accept arbitrary truthy strings |
 
+### UI Copy Conventions
+
+- **Button labels must always use Title Case** — capitalize the first letter of every word except short conjunctions (and, or, but) and short prepositions (to, in, of). Examples: "Save Settings", "Test Connection", "Send Test Email", "Save and Continue", "Continue to Settings".
+- This rule applies to every button in every template, across all pages and future additions.
+
 ### Template Security
 
 - All Jinja2 templates use auto-escaping (enabled globally in `main.py`). Do not use `| safe` filter unless the content is guaranteed to be sanitized server-side HTML.
@@ -346,6 +351,11 @@ These bugs and UX gaps were discovered during the first real end-to-end run of t
 - **Settings page — YNAB test connectivity**: Same fix as AI — test button now reads the API key from the form field, falling back to the saved encrypted key if blank. No save required before testing.
 - **Settings page — SMTP test connectivity**: Same fix as AI/YNAB — test button reads all SMTP fields (host, port, username, password, TLS) from the form, falling back to saved values per field.
 - **Recovery codes page**: "Continue to settings" button was clickable before the user confirmed saving codes. Now starts disabled/greyed out and only activates when the checkbox is checked.
+- **SMTP TLS handling**: `aiosmtplib` always used STARTTLS, which fails on port 465 (implicit TLS) with "Connection already using TLS". Now auto-detects: port 465 → implicit TLS (`use_tls=True`), port 587/other → STARTTLS. Fixed in `email_service.py` (both `send_report_email` and `test_smtp_connection`) and the inline SMTP test in `api.py`.
+- **SMTP TLS checkbox fallback**: When the TLS checkbox was unchecked, the form sent an empty string which the server treated as "field absent" and fell back to the saved DB value. Fixed with `is not None` check: an explicit empty string is now correctly read as `False`.
+- **SMTP test send**: Added `POST /api/test/smtp/send` endpoint that connects and sends a real test email to `report_to_email`. Added "Send test email" button to the Email Settings section alongside the existing "Test connection" button. Both buttons read from current form fields without requiring a save first.
+- **Multiple report recipients**: `report_to_email` now accepts comma-separated email addresses (e.g. `alice@example.com, bob@example.com`). The column was widened to `String(2048)`. The Pydantic schema validates each address individually. `email_service.py` and the test send endpoint split by comma and pass an explicit `recipients` list to aiosmtplib. Live per-address validation added to the settings form.
+- **Email settings UX**: Host, port, From address, and Send reports to show red asterisks and are required only when Enable email is checked. Port field has clickable chips for 587 (STARTTLS), 465 (SSL/TLS), and 25 (Unencrypted). Email address fields validate format on blur and clear errors dynamically as the user types valid addresses. All validation clears automatically when email is disabled.
 
 ### Settings Page UX Improvements
 - **Layout reorder**: YNAB section: token → test button → budget dropdown. AI section: provider → key → base URL → test button → model combobox.

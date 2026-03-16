@@ -1,6 +1,6 @@
 from typing import Literal
 
-from pydantic import AnyHttpUrl, BaseModel, EmailStr, Field, field_validator, model_validator
+from pydantic import AnyHttpUrl, BaseModel, EmailStr, Field, TypeAdapter, field_validator, model_validator
 
 
 class YnabSettingsUpdate(BaseModel):
@@ -39,7 +39,23 @@ class SmtpSettingsUpdate(BaseModel):
     smtp_password: str | None = Field(default=None, max_length=512)
     smtp_use_tls: bool = True
     smtp_from_email: EmailStr
-    report_to_email: EmailStr
+    report_to_email: str  # comma-separated; validated per-address below
+
+    @field_validator("report_to_email", mode="before")
+    @classmethod
+    def validate_recipient_emails(cls, v: str) -> str:
+        """Accept one or more comma-separated email addresses."""
+        addresses = [a.strip() for a in (v or "").split(",") if a.strip()]
+        if not addresses:
+            raise ValueError("At least one recipient email address is required.")
+        _email_adapter = TypeAdapter(EmailStr)
+        validated: list[str] = []
+        for addr in addresses:
+            try:
+                validated.append(_email_adapter.validate_python(addr))
+            except Exception:
+                raise ValueError(f"Invalid email address: {addr!r}")
+        return ", ".join(validated)
 
 
 class ScheduleSettingsUpdate(BaseModel):

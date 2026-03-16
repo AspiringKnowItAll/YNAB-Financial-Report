@@ -2,7 +2,9 @@
 Async SMTP email delivery service.
 
 Uses aiosmtplib with the user's own SMTP server — no hosted infrastructure.
-STARTTLS defaults to enabled (smtp_use_tls=True → STARTTLS on port 587).
+TLS mode is auto-detected from the port when smtp_use_tls=True:
+  - Port 465 → implicit TLS (connection starts encrypted)
+  - Port 587 / other → STARTTLS (plain connection upgraded to TLS)
 Credentials are decrypted in memory and never re-stored or logged.
 
 Public API:
@@ -160,9 +162,17 @@ async def send_report_email(
         msg = MIMEMultipart("alternative")
         msg.attach(MIMEText(html_body, "html", "utf-8"))
 
+    # report_to_email may be comma-separated; build explicit recipient list.
+    recipients = [a.strip() for a in (settings.report_to_email or "").split(",") if a.strip()]
+
     msg["Subject"] = subject
     msg["From"] = settings.smtp_from_email
-    msg["To"] = settings.report_to_email
+    msg["To"] = ", ".join(recipients)
+
+    # Port 465 = implicit TLS (connection starts encrypted).
+    # Port 587 (or other) = STARTTLS (plain → upgrade) when TLS is enabled.
+    use_implicit_tls = settings.smtp_use_tls and settings.smtp_port == 465
+    use_starttls = settings.smtp_use_tls and not use_implicit_tls
 
     await aiosmtplib.send(
         msg,
@@ -170,7 +180,9 @@ async def send_report_email(
         port=settings.smtp_port,
         username=settings.smtp_username or None,
         password=smtp_password,
-        start_tls=settings.smtp_use_tls,
+        recipients=recipients,
+        use_tls=use_implicit_tls,
+        start_tls=use_starttls,
     )
 
 
@@ -189,10 +201,17 @@ async def test_smtp_connection(settings: AppSettings, master_key: bytes) -> None
     if settings.smtp_password_enc:
         smtp_password = decrypt(settings.smtp_password_enc, master_key)
 
-    smtp = aiosmtplib.SMTP(hostname=settings.smtp_host, port=settings.smtp_port)
+    # Port 465 = implicit TLS; port 587 (or other) = STARTTLS when TLS enabled.
+    use_implicit_tls = settings.smtp_use_tls and settings.smtp_port == 465
+
+    smtp = aiosmtplib.SMTP(
+        hostname=settings.smtp_host,
+        port=settings.smtp_port,
+        use_tls=use_implicit_tls,
+    )
     await smtp.connect()
     try:
-        if settings.smtp_use_tls:
+        if settings.smtp_use_tls and not use_implicit_tls:
             await smtp.starttls()
         if settings.smtp_username:
             await smtp.login(settings.smtp_username, smtp_password or "")

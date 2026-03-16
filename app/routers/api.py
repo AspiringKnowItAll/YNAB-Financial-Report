@@ -8,6 +8,7 @@ POST /api/report/email/{id}      → Email a report snapshot via SMTP
 POST /api/test/ynab              → Test YNAB API connectivity
 POST /api/test/ai                → Test AI provider connectivity
 POST /api/test/smtp              → Test SMTP connectivity
+POST /api/test/smtp/send         → Test SMTP by sending a real email to report_to_email
 
 Phases 3–8.
 """
@@ -283,9 +284,10 @@ async def test_smtp(request: Request, db: AsyncSession = Depends(get_db)):
     smtp_port_raw = (form.get("smtp_port") or "").strip()
     smtp_port = int(smtp_port_raw) if smtp_port_raw else (settings.smtp_port if settings else 587)
     smtp_username = (form.get("smtp_username") or "").strip() or (settings.smtp_username if settings else None)
-    smtp_use_tls = bool(form.get("smtp_use_tls"))
-    if not form.get("smtp_use_tls") and settings:
-        smtp_use_tls = settings.smtp_use_tls
+    # Use 'is not None' so an explicitly-sent empty string (unchecked checkbox)
+    # is treated as False rather than falling back to the saved DB value.
+    tls_raw = form.get("smtp_use_tls")
+    smtp_use_tls = (tls_raw == "1") if tls_raw is not None else (settings.smtp_use_tls if settings else True)
 
     # Password: form field first, then saved encrypted value
     smtp_password: str | None = (form.get("smtp_password") or "").strip() or None
@@ -303,10 +305,17 @@ async def test_smtp(request: Request, db: AsyncSession = Depends(get_db)):
 
     try:
         import aiosmtplib
-        smtp = aiosmtplib.SMTP(hostname=smtp_host, port=smtp_port)
+        # Port 465 = implicit TLS; port 587 (or other) = STARTTLS when TLS enabled.
+        use_implicit_tls = smtp_use_tls and smtp_port == 465
+
+        smtp = aiosmtplib.SMTP(
+            hostname=smtp_host,
+            port=smtp_port,
+            use_tls=use_implicit_tls,
+        )
         await smtp.connect()
         try:
-            if smtp_use_tls:
+            if smtp_use_tls and not use_implicit_tls:
                 await smtp.starttls()
             if smtp_username:
                 await smtp.login(smtp_username, smtp_password or "")
@@ -320,6 +329,96 @@ async def test_smtp(request: Request, db: AsyncSession = Depends(get_db)):
     except Exception as exc:
         return JSONResponse(
             {"status": "error", "message": f"SMTP connection failed: {exc}"},
+            status_code=502,
+        )
+
+
+# ---------------------------------------------------------------------------
+# SMTP test send
+# ---------------------------------------------------------------------------
+
+@router.post("/test/smtp/send")
+async def test_smtp_send(request: Request, db: AsyncSession = Depends(get_db)):
+    """
+    Verify SMTP by sending a real test email to report_to_email.
+
+    Accepts SMTP fields directly from the form so the user can test before
+    saving. Falls back to saved values for any field left blank.
+    """
+    from email.mime.text import MIMEText
+    import aiosmtplib
+
+    form = await request.form()
+    settings = await _get_settings(db)
+    master_key = request.app.state.master_key
+
+    smtp_host = (form.get("smtp_host") or "").strip() or (settings.smtp_host if settings else None)
+    smtp_port_raw = (form.get("smtp_port") or "").strip()
+    smtp_port = int(smtp_port_raw) if smtp_port_raw else (settings.smtp_port if settings else 587)
+    smtp_username = (form.get("smtp_username") or "").strip() or (settings.smtp_username if settings else None)
+    tls_raw = form.get("smtp_use_tls")
+    smtp_use_tls = (tls_raw == "1") if tls_raw is not None else (settings.smtp_use_tls if settings else True)
+    smtp_from_email = (form.get("smtp_from_email") or "").strip() or (settings.smtp_from_email if settings else None)
+    report_to_email = (form.get("report_to_email") or "").strip() or (settings.report_to_email if settings else None)
+
+    smtp_password: str | None = (form.get("smtp_password") or "").strip() or None
+    if not smtp_password and settings and settings.smtp_password_enc:
+        try:
+            smtp_password = decrypt(settings.smtp_password_enc, master_key)
+        except ValueError as exc:
+            return JSONResponse({"status": "error", "message": str(exc)}, status_code=400)
+
+    missing = []
+    if not smtp_host:
+        missing.append("SMTP host")
+    if not smtp_from_email:
+        missing.append("From address")
+    if not report_to_email:
+        missing.append("Send reports to")
+    if missing:
+        return JSONResponse(
+            {"status": "error", "message": f"Configure these fields first: {', '.join(missing)}."},
+            status_code=400,
+        )
+
+    try:
+        msg = MIMEText(
+            "This is a test email from YNAB Financial Report.\n\n"
+            "If you received this, your SMTP settings are configured correctly.",
+            "plain",
+            "utf-8",
+        )
+        # report_to_email may be comma-separated; build explicit recipient list.
+        recipients = [a.strip() for a in (report_to_email or "").split(",") if a.strip()]
+
+        msg["Subject"] = "YNAB Financial Report — SMTP test"
+        msg["From"] = smtp_from_email
+        msg["To"] = ", ".join(recipients)
+
+        use_implicit_tls = smtp_use_tls and smtp_port == 465
+
+        smtp = aiosmtplib.SMTP(
+            hostname=smtp_host,
+            port=smtp_port,
+            use_tls=use_implicit_tls,
+        )
+        await smtp.connect()
+        try:
+            if smtp_use_tls and not use_implicit_tls:
+                await smtp.starttls()
+            if smtp_username:
+                await smtp.login(smtp_username, smtp_password or "")
+            await smtp.send_message(msg, recipients=recipients)
+        finally:
+            await smtp.quit()
+
+        return JSONResponse({
+            "status": "success",
+            "message": f"Test email sent to {', '.join(recipients)}.",
+        })
+    except Exception as exc:
+        return JSONResponse(
+            {"status": "error", "message": f"SMTP send failed: {exc}"},
             status_code=502,
         )
 

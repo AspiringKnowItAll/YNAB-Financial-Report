@@ -34,7 +34,7 @@ class AppSettings(Base):
     smtp_password_enc: Mapped[bytes | None] = mapped_column(LargeBinary, nullable=True)
     smtp_use_tls: Mapped[bool] = mapped_column(Boolean, default=True)
     smtp_from_email: Mapped[str | None] = mapped_column(String(254), nullable=True)
-    report_to_email: Mapped[str | None] = mapped_column(String(254), nullable=True)
+    report_to_email: Mapped[str | None] = mapped_column(String(2048), nullable=True)  # comma-separated list
 
     # Notion
     notion_enabled: Mapped[bool] = mapped_column(Boolean, default=False)
