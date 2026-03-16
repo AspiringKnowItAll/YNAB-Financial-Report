@@ -75,12 +75,15 @@ async def get_or_create_session(request: Request, db: AsyncSession = Depends(get
 
     if active:
         messages = await lcs.get_messages(active, master_key)
-        return {
-            "session_id": active.id,
-            "is_resumed": True,
-            "messages": messages,
-            "intro": None,
-        }
+        if messages:
+            return {
+                "session_id": active.id,
+                "is_resumed": True,
+                "messages": messages,
+                "intro": None,
+            }
+        # Zombie session (opened but no messages sent) — abandon and start fresh
+        await lcs.abandon_session(db, active)
 
     # No active session — create one and return intro data
     session = await lcs.create_session(db)

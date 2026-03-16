@@ -216,6 +216,15 @@ async def create_session(db: AsyncSession) -> LifeContextSession:
     return session
 
 
+async def abandon_session(db: AsyncSession, session: LifeContextSession) -> None:
+    """
+    Silently close a session that has no messages (zombie session).
+    Marks it ended without calling the AI or creating a context block.
+    """
+    session.ended_at = _now_iso()
+    await db.commit()
+
+
 async def get_messages(session: LifeContextSession, master_key: bytes) -> list[dict]:
     """Decrypt and return the message list for a session."""
     return _decode_messages(session.messages_enc, master_key)
