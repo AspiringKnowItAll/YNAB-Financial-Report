@@ -25,6 +25,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from app.database import get_db
 from app.models.account import Account
 from app.models.budget import Budget, Category, CategoryGroup
+from app.models.life_context import LifeContextBlock
 from app.models.report import SyncLog
 from app.models.settings import AppSettings
 from app.models.transaction import Transaction
@@ -296,6 +297,12 @@ async def get_dashboard(request: Request, db: AsyncSession = Depends(get_db)):
             },
         })
 
+    # ── Life context nudge (show amber banner if no context block exists) ──
+    result = await db.execute(
+        select(LifeContextBlock).where(LifeContextBlock.archived.is_(False)).limit(1)
+    )
+    show_context_nudge = result.scalar_one_or_none() is None
+
     return templates.TemplateResponse(request, "dashboard/dashboard.html", {
         "budget_name": budget_name,
         "has_data": has_data,
@@ -309,4 +316,5 @@ async def get_dashboard(request: Request, db: AsyncSession = Depends(get_db)):
         "total_outlier_months_excluded": total_outlier_months_excluded,
         "trend_chart_json": trend_chart_json,
         "category_chart_json": category_chart_json,
+        "show_context_nudge": show_context_nudge,
     })

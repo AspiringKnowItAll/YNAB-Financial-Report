@@ -14,12 +14,13 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.models.account import Account
 from app.models.budget import Budget, Category, CategoryGroup
+from app.models.life_context import LifeContextBlock
 from app.models.report import ReportSnapshot
 from app.models.settings import AppSettings
 from app.models.transaction import Transaction
-from app.models.user_profile import UserProfile
 from app.services import analysis_service
 from app.services.ai_service import get_ai_provider
+from app.services.encryption import decrypt
 
 
 # ---------------------------------------------------------------------------
@@ -72,7 +73,7 @@ def _build_ai_prompt(
     cat_spend: list[dict],
     cat_averages_by_id: dict,
     outlier_months: list[dict],
-    profile: UserProfile,
+    life_context: str | None,
     net_worth: int,
 ) -> tuple[str, str]:
     """
@@ -88,16 +89,11 @@ def _build_ai_prompt(
         "Respond in Markdown."
     )
 
-    # Profile section
-    profile_lines = [f"- Household size: {profile.household_size or 'not specified'}"]
-    if profile.income_type:
-        profile_lines.append(f"- Income type: {profile.income_type}")
-    if profile.housing_type:
-        profile_lines.append(f"- Housing: {profile.housing_type}")
-    if profile.financial_goals:
-        profile_lines.append(f"- Financial goals: {profile.financial_goals}")
-    if profile.notes:
-        profile_lines.append(f"- Additional context: {profile.notes}")
+    # Life context section
+    if life_context:
+        profile_lines = [life_context]
+    else:
+        profile_lines = ["(No personal context has been set up yet.)"]
 
     # Current month totals
     current = next((mt for mt in monthly_totals if mt.month == month), None)
@@ -144,7 +140,7 @@ def _build_ai_prompt(
     user_parts = [
         f"Financial summary for **{month}**:",
         "",
-        "**Household Profile**",
+        "**Personal Financial Context**",
         *profile_lines,
         "",
         "**Monthly Summary**",
@@ -306,7 +302,6 @@ def _build_category_chart_json(cat_spend: list[dict]) -> str | None:
 async def generate_report(
     db: AsyncSession,
     settings: AppSettings,
-    profile: UserProfile,
     master_key: bytes,
     budget_id: str,
     month: str,
@@ -321,7 +316,6 @@ async def generate_report(
     Args:
         db: Async SQLAlchemy session.
         settings: AppSettings singleton (id=1).
-        profile: UserProfile singleton (id=1).
         master_key: From app.state.master_key.
         budget_id: YNAB budget UUID.
         month: Target month in YYYY-MM format.
@@ -402,6 +396,21 @@ async def generate_report(
     # ── Outlier months ────────────────────────────────────────────────────
     outlier_months = _detect_outlier_months(transactions, categories)
 
+    # ── Life context block ────────────────────────────────────────────────
+    life_context_text: str | None = None
+    result = await db.execute(
+        select(LifeContextBlock)
+        .where(LifeContextBlock.archived.is_(False))
+        .order_by(LifeContextBlock.version.desc())
+        .limit(1)
+    )
+    context_block = result.scalar_one_or_none()
+    if context_block is not None:
+        try:
+            life_context_text = decrypt(context_block.context_enc, master_key)
+        except Exception:
+            life_context_text = None
+
     # ── AI commentary ─────────────────────────────────────────────────────
     ai_commentary: str | None = None
     if settings.ai_provider:
@@ -413,7 +422,7 @@ async def generate_report(
                 cat_spend=cat_spend,
                 cat_averages_by_id=avg_by_id,
                 outlier_months=outlier_months,
-                profile=profile,
+                life_context=life_context_text,
                 net_worth=net_worth,
             )
             ai_commentary = await ai_provider.generate(

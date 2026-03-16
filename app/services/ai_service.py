@@ -11,6 +11,7 @@ Supported providers:
   "ollama"      → OpenAI-compatible (ai_base_url = http://localhost:11434/v1)
 """
 
+from collections.abc import AsyncIterator
 from typing import Protocol
 
 from app.models.settings import AppSettings
@@ -32,6 +33,10 @@ class AIProvider(Protocol):
 
     async def list_models(self) -> list[str]:
         """Return available model IDs sorted alphabetically."""
+        ...
+
+    async def stream(self, system: str, user: str, max_tokens: int) -> AsyncIterator[str]:
+        """Stream a completion token-by-token. Yields text chunks as they arrive."""
         ...
 
 
@@ -75,6 +80,19 @@ class AnthropicProvider:
         models = await client.models.list(limit=100)
         return sorted(m.id for m in models.data)
 
+    async def stream(self, system: str, user: str, max_tokens: int) -> AsyncIterator[str]:
+        """Stream a completion token-by-token using Anthropic's streaming API."""
+        from anthropic import AsyncAnthropic
+        client = AsyncAnthropic(api_key=self._api_key)
+        async with client.messages.stream(
+            model=self._model,
+            max_tokens=max_tokens,
+            system=system,
+            messages=[{"role": "user", "content": user}],
+        ) as stream_ctx:
+            async for text in stream_ctx.text_stream:
+                yield text
+
 
 # ---------------------------------------------------------------------------
 # OpenAI-compatible implementation (OpenAI, OpenRouter, Ollama)
@@ -116,6 +134,22 @@ class OpenAIProvider:
         """Return available model IDs sorted alphabetically."""
         response = await self._client().models.list()
         return sorted(m.id for m in response.data)
+
+    async def stream(self, system: str, user: str, max_tokens: int) -> AsyncIterator[str]:
+        """Stream a completion token-by-token using the OpenAI streaming API."""
+        stream = await self._client().chat.completions.create(
+            model=self._model,
+            max_tokens=max_tokens,
+            messages=[
+                {"role": "system", "content": system},
+                {"role": "user", "content": user},
+            ],
+            stream=True,
+        )
+        async for chunk in stream:
+            delta = chunk.choices[0].delta.content
+            if delta:
+                yield delta
 
 
 # ---------------------------------------------------------------------------

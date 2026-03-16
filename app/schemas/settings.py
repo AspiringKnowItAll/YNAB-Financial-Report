@@ -85,6 +85,17 @@ class ScheduleSettingsUpdate(BaseModel):
         return self
 
 
+class LifeContextSettingsUpdate(BaseModel):
+    """Validated input for the life context advanced settings section."""
+
+    life_context_pre_prompt: str | None = Field(default=None, max_length=4000)
+
+    @field_validator("life_context_pre_prompt", mode="before")
+    @classmethod
+    def strip_prompt(cls, v: str | None) -> str | None:
+        return v.strip() if v else None
+
+
 class NotionSettingsUpdate(BaseModel):
     """Validated input for the Notion section of the Settings form."""
 

@@ -17,6 +17,7 @@ from app.database import get_db
 from app.models.settings import AppSettings
 from app.schemas.settings import (
     AiSettingsUpdate,
+    LifeContextSettingsUpdate,
     NotionSettingsUpdate,
     ScheduleSettingsUpdate,
     SmtpSettingsUpdate,
@@ -51,6 +52,7 @@ async def get_settings(request: Request, db: AsyncSession = Depends(get_db)):
         "has_ai_key": bool(settings.ai_api_key_enc),
         "has_smtp_password": bool(settings.smtp_password_enc),
         "has_notion_token": bool(settings.notion_token_enc),
+        "has_life_context_pre_prompt": bool(settings.life_context_pre_prompt_enc),
         "saved": request.query_params.get("saved") == "1",
     }
     return templates.TemplateResponse(request, "settings/settings.html", context)
@@ -90,6 +92,8 @@ async def post_settings(
     schedule_month: str = Form(default=""),
     schedule_report_target: str = Form(default="previous_month"),
     schedule_send_email: str = Form(default=""),
+    # Life context
+    life_context_pre_prompt: str = Form(default=""),
 ):
     master_key = request.app.state.master_key
     settings = await _get_or_create_settings(db)
@@ -193,6 +197,18 @@ async def post_settings(
     except Exception as exc:
         _collect_errors(exc, errors, "Scheduler")
 
+    # --- Life Context pre-prompt ---
+    if life_context_pre_prompt.strip():
+        try:
+            lc = LifeContextSettingsUpdate(life_context_pre_prompt=life_context_pre_prompt)
+            if lc.life_context_pre_prompt:
+                settings.life_context_pre_prompt_enc = encrypt(lc.life_context_pre_prompt, master_key)
+        except Exception as exc:
+            _collect_errors(exc, errors, "Life Context")
+    elif not life_context_pre_prompt.strip():
+        # Explicit empty string → clear the override (use default pre-prompt)
+        settings.life_context_pre_prompt_enc = None
+
     if errors:
         # Snapshot the boolean flags before rollback expires the ORM object.
         has_ynab_key = bool(settings.ynab_api_key_enc)
@@ -208,6 +224,7 @@ async def post_settings(
             "has_ai_key": has_ai_key,
             "has_smtp_password": has_smtp_password,
             "has_notion_token": has_notion_token,
+            "has_life_context_pre_prompt": bool(settings.life_context_pre_prompt_enc),
             "errors": errors,
             "saved": False,
         }
@@ -234,6 +251,7 @@ async def post_settings(
             "has_ai_key": bool(settings.ai_api_key_enc),
             "has_smtp_password": bool(settings.smtp_password_enc),
             "has_notion_token": bool(settings.notion_token_enc),
+            "has_life_context_pre_prompt": bool(settings.life_context_pre_prompt_enc),
             "saved": True,
             "missing": missing,
         }

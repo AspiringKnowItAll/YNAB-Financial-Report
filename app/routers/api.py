@@ -21,7 +21,6 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.database import get_db
 from app.models.settings import AppSettings
-from app.models.user_profile import UserProfile
 from app.services.encryption import decrypt
 from app.services.sync_service import run_sync
 from app.services.ynab_client import YnabClient
@@ -35,11 +34,6 @@ router = APIRouter(prefix="/api", tags=["api"])
 
 async def _get_settings(db: AsyncSession) -> AppSettings | None:
     result = await db.execute(select(AppSettings).where(AppSettings.id == 1))
-    return result.scalar_one_or_none()
-
-
-async def _get_profile(db: AsyncSession) -> UserProfile | None:
-    result = await db.execute(select(UserProfile).where(UserProfile.id == 1))
     return result.scalar_one_or_none()
 
 
@@ -107,13 +101,6 @@ async def trigger_report(
             status_code=400,
         )
 
-    profile = await _get_profile(db)
-    if not profile:
-        return JSONResponse(
-            {"status": "error", "message": "User profile is not set up."},
-            status_code=400,
-        )
-
     # Determine target month
     if month:
         # Basic YYYY-MM validation
@@ -135,7 +122,6 @@ async def trigger_report(
         snapshot = await generate_report(
             db=db,
             settings=settings,
-            profile=profile,
             master_key=master_key,
             budget_id=settings.ynab_budget_id,
             month=month,

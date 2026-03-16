@@ -84,7 +84,6 @@ async def _run_scheduled_job(app) -> None:  # app: FastAPI — avoid circular im
     Skips with an error log if the app is locked.
     """
     from app.models.budget import Budget
-    from app.models.user_profile import UserProfile
     from app.services.email_service import build_report_email_html, send_report_email
     from app.services.encryption import decrypt
     from app.services.export_service import render_pdf
@@ -108,13 +107,6 @@ async def _run_scheduled_job(app) -> None:  # app: FastAPI — avoid circular im
             logger.error("Scheduled job skipped: YNAB API key or budget ID is not configured.")
             return
 
-        # Load profile
-        result = await db.execute(select(UserProfile).where(UserProfile.id == 1))
-        profile = result.scalar_one_or_none()
-        if not profile or not profile.setup_complete:
-            logger.error("Scheduled job skipped: user profile is not complete.")
-            return
-
         # 1. Sync
         try:
             api_key = decrypt(settings.ynab_api_key_enc, master_key)
@@ -134,7 +126,6 @@ async def _run_scheduled_job(app) -> None:  # app: FastAPI — avoid circular im
             snapshot = await generate_report(
                 db=db,
                 settings=settings,
-                profile=profile,
                 master_key=master_key,
                 budget_id=settings.ynab_budget_id,
                 month=target_month,

@@ -171,7 +171,7 @@ YNAB-Financial-Report/
 │   ├── scheduler.py              # APScheduler; configurable CronTrigger; auto sync→report→email pipeline
 │   ├── models/
 │   │   ├── settings.py           # AppSettings ORM (encrypted secrets)
-│   │   ├── user_profile.py       # UserProfile ORM (wizard answers)
+│   │   ├── life_context.py       # LifeContextSession, LifeContextBlock ORM (Phase 12)
 │   │   ├── budget.py             # Budget, CategoryGroup, Category ORM
 │   │   ├── transaction.py        # Transaction ORM (core fact table)
 │   │   ├── account.py            # Account ORM
@@ -187,7 +187,8 @@ YNAB-Financial-Report/
 │   │   ├── ynab_client.py        # YNAB REST client
 │   │   ├── sync_service.py       # YNAB → SQLite pipeline
 │   │   ├── analysis_service.py   # Pure statistical functions
-│   │   ├── ai_service.py         # AIProvider protocol + all implementations
+│   │   ├── ai_service.py         # AIProvider protocol + all implementations (generate + stream)
+│   │   ├── life_context_service.py  # Life context chat: sessions, streaming, compression (Phase 12)
 │   │   ├── report_service.py     # Assembles report snapshots
 │   │   ├── export_service.py     # HTML + PDF rendering
 │   │   ├── email_service.py      # SMTP delivery
@@ -196,8 +197,8 @@ YNAB-Financial-Report/
 │   │   ├── auth.py               # GET/POST /first-run, /unlock, /recovery
 │   │   ├── dashboard.py          # GET /
 │   │   ├── settings.py           # GET/POST /settings
-│   │   ├── setup.py              # GET/POST /setup
 │   │   ├── reports.py            # GET /reports, /reports/{id}
+│   │   ├── life_context.py       # GET /profile; /api/chat/* endpoints (Phase 12)
 │   │   ├── api.py                # POST /api/sync/trigger, /api/report/generate, /api/report/email/{id}, test endpoints
 │   │   └── export.py             # GET /export/{id}/pdf|html
 │   ├── templates/
@@ -328,13 +329,13 @@ Outlier exclusions must be stored in `report_snapshots.outliers_excluded` (JSON 
 | 9 — Scheduler | Complete | Configurable automated schedule (daily/weekly/biweekly/monthly/yearly); auto sync → report → email; previous or current month target; locked-app skip with error log; DB migration for new columns |
 | 10 — Tests + Hardening | Complete | pytest suite (unit + integration), TemplateResponse deprecation fix, full docs |
 | 11 — First-Run Bug Fixes | Complete | Docker build fixes, runtime issues, UX improvements found during first real deployment |
-| 12 — Life Context Chat | Planned (design complete — see `docs/phase12_plan.md`) | Replace profile wizard with AI-driven chat; user tells their financial life story; AI compresses to an encrypted context block injected into reports; versioned, updateable at any time |
+| 12 — Life Context Chat | Complete | Replace profile wizard with AI-driven chat; user tells their financial life story; AI compresses to an encrypted context block injected into reports; versioned, updateable at any time |
 | 13 — External Data Import | Planned | Upload PDF/CSV financial documents; AI normalizes to transaction records or balance snapshots; user confirms before saving; included in AI report prompt; optional YNAB account association |
 | 14 — Dashboard Redesign | Deferred | Full dashboard redesign after Phase 12 + 13 data sources are in place; will include external accounts, net worth, richer dynamic charts |
 
 ---
 
-## Known Issues / Active Work (Phase 11)
+## Known Issues / Active Work (Phase 12)
 
 These bugs and UX gaps were discovered during the first real end-to-end run of the app and are actively being addressed:
 
@@ -377,19 +378,40 @@ These bugs and UX gaps were discovered during the first real end-to-end run of t
 - `list_models() -> list[str]` added to `AIProvider` protocol and both implementations (`AnthropicProvider`, `OpenAIProvider`). Returns available model IDs sorted alphabetically. Used by the settings page test button.
 - `get_ai_provider_from_params(provider_name, api_key, base_url)` factory added to `ai_service.py`. Builds an `AIProvider` from plaintext form values without requiring a DB record or encryption. Used by `/api/test/ai`.
 
+### Phase 12 Changes
+
+- **`app/models/life_context.py`** — New. `LifeContextSession` (encrypted chat history) and `LifeContextBlock` (encrypted compressed context, versioned).
+- **`app/services/life_context_service.py`** — New. All chat/context business logic: session management, streaming reply, end-session compression, block versioning.
+- **`app/routers/life_context.py`** — New. `GET /profile`, `GET /api/chat/session`, `POST /api/chat/message` (SSE), `POST /api/chat/opener` (SSE), `POST /api/chat/end`.
+- **`app/templates/life_context/profile.html`** — New. Full-page "My Financial Profile" view.
+- **`app/static/js/chat_widget.js`** — New. Floating chat button + sliding panel. Handles session init/resume, SSE streaming, starter chips, end-session, beforeunload warning.
+- **`app/services/ai_service.py`** — Added `stream()` method to `AIProvider` protocol, `AnthropicProvider`, and `OpenAIProvider`.
+- **`app/services/report_service.py`** — `_build_ai_prompt()` and `generate_report()` now use `LifeContextBlock` (decrypted context text) instead of `UserProfile`. `profile` param removed from `generate_report()`.
+- **`app/routers/dashboard.py`** — Queries `LifeContextBlock` to determine `show_context_nudge`; passes flag to template.
+- **`app/templates/dashboard/dashboard.html`** — Added amber nudge banner (conditional on no context block), nav link updated to "My Financial Profile", chat widget script loaded.
+- **`app/models/settings.py`** — Added `life_context_pre_prompt_enc: LargeBinary | None`.
+- **`app/schemas/settings.py`** — Added `LifeContextSettingsUpdate` schema.
+- **`app/routers/settings.py`** — Handles `life_context_pre_prompt` form field; imports `LifeContextSettingsUpdate`.
+- **`app/templates/settings/settings.html`** — Added Advanced collapsible section with pre-prompt textarea.
+- **`app/database.py`** — `apply_migrations()` adds `life_context_pre_prompt_enc` column to `app_settings` and drops `user_profile` table. `create_all()` registers new models.
+- **`app/main.py`** — Removed `setup` router import, removed Step 4 (wizard check) from middleware, added `life_context` router.
+- **`app/scheduler.py`** — Removed `UserProfile` dependency; `generate_report()` called without `profile` param.
+- **`app/routers/api.py`** — Removed `UserProfile` import and `_get_profile` helper; `generate_report()` called without `profile` param.
+- **Deleted**: `app/models/user_profile.py`, `app/routers/setup.py`, `app/schemas/setup.py`, `app/templates/setup/setup.html`.
+
 ### Known Issues Still To Address
 
-None. All Phase 11 bugs are resolved. Dashboard visual review is deferred to Phase 14 (intentional — see implementation status).
+None. All Phase 12 items are complete. Dashboard visual review is deferred to Phase 14 (intentional — see implementation status).
 
 ---
 
 ## V2 Roadmap (Phases 12–14)
 
-These phases are planned and approved. Implementation begins after a clean v1 commit. See the plan file for full architectural detail.
+Phase 12 is complete. Phases 13 and 14 are planned. See the implementation status table.
 
-### Phase 12 — Life Context Chat
+### Phase 12 — Life Context Chat ✓ Complete
 
-> **Design is complete. Full specification and confirmed decisions are in [`docs/phase12_plan.md`](docs/phase12_plan.md). Read that file before touching any Phase 12 code.**
+> **Implemented. Full specification in [`docs/phase12_plan.md`](docs/phase12_plan.md).**
 
 **Goal:** Replace the profile wizard with an AI-driven conversational system that lets users build and maintain a "financial life story" — personal context the AI uses to produce more personalized, actionable reports.
 

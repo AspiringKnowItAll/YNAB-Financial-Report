@@ -50,5 +50,8 @@ class AppSettings(Base):
     schedule_report_target: Mapped[str] = mapped_column(String(16), default="previous_month")  # "previous_month"|"current_month"
     schedule_send_email: Mapped[bool] = mapped_column(Boolean, default=False)
 
+    # Life context chat
+    life_context_pre_prompt_enc: Mapped[bytes | None] = mapped_column(LargeBinary, nullable=True)
+
     # Wizard completion flag
     settings_complete: Mapped[bool] = mapped_column(Boolean, default=False)

@@ -1,0 +1,232 @@
+{% extends "base.html" %}
+
+{% block title %}My Financial Profile{% endblock %}
+
+{% block extra_head %}
+<style>
+  .page-body {
+    max-width: 860px;
+    margin: 0 auto;
+    padding: 1.5rem;
+  }
+
+  .page-header {
+    display: flex;
+    align-items: baseline;
+    justify-content: space-between;
+    flex-wrap: wrap;
+    gap: 0.75rem;
+    margin-bottom: 1.5rem;
+  }
+
+  .page-header__title {
+    font-size: 1.3rem;
+    font-weight: 700;
+    color: var(--text);
+  }
+
+  /* ── Context block card ───────────────────────────── */
+  .context-card {
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: var(--radius);
+    padding: 1.5rem;
+    margin-bottom: 1.5rem;
+  }
+
+  .context-card__header {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    margin-bottom: 1rem;
+  }
+
+  .context-card__title {
+    font-size: 0.8rem;
+    font-weight: 700;
+    text-transform: uppercase;
+    letter-spacing: 0.06em;
+    color: var(--muted);
+  }
+
+  .context-card__body {
+    color: var(--text);
+    font-size: 0.95rem;
+    line-height: 1.7;
+    white-space: pre-wrap;
+    word-break: break-word;
+  }
+
+  .context-card__empty {
+    color: var(--muted);
+    font-style: italic;
+    font-size: 0.9rem;
+  }
+
+  /* ── History ──────────────────────────────────────── */
+  .history-panel {
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: var(--radius);
+    padding: 1.25rem 1.5rem;
+    margin-bottom: 1.5rem;
+  }
+
+  .history-panel__title {
+    font-size: 0.8rem;
+    font-weight: 700;
+    text-transform: uppercase;
+    letter-spacing: 0.06em;
+    color: var(--muted);
+    margin-bottom: 1rem;
+  }
+
+  .history-item {
+    display: flex;
+    align-items: baseline;
+    gap: 0.75rem;
+    padding: 0.5rem 0;
+    border-bottom: 1px solid rgba(46,49,71,0.5);
+    font-size: 0.875rem;
+  }
+
+  .history-item:last-child { border-bottom: none; }
+
+  .history-item__version {
+    font-weight: 700;
+    color: var(--accent);
+    min-width: 2.5rem;
+  }
+
+  .history-item__date { color: var(--muted); font-size: 0.8rem; }
+
+  .history-item__badge {
+    margin-left: auto;
+    font-size: 0.72rem;
+    font-weight: 600;
+    padding: 0.15rem 0.5rem;
+    border-radius: 4px;
+  }
+
+  .history-item__badge--current {
+    background: rgba(76,175,130,0.15);
+    color: var(--success);
+  }
+
+  .history-item__badge--archived {
+    background: rgba(123,128,160,0.12);
+    color: var(--muted);
+  }
+
+  /* ── Open Chat button ─────────────────────────────── */
+  .chat-cta {
+    display: flex;
+    align-items: center;
+    gap: 1rem;
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: var(--radius);
+    padding: 1.25rem 1.5rem;
+    margin-bottom: 1.5rem;
+  }
+
+  .chat-cta__text {
+    flex: 1;
+    font-size: 0.9rem;
+    color: var(--muted);
+  }
+
+  .chat-cta__text strong { color: var(--text); display: block; margin-bottom: 0.2rem; }
+
+  /* ── Session resume notice ────────────────────────── */
+  .resume-notice {
+    background: rgba(245,166,35,0.1);
+    border: 1px solid rgba(245,166,35,0.35);
+    border-radius: var(--radius);
+    padding: 0.75rem 1rem;
+    font-size: 0.875rem;
+    color: #f7c96a;
+    margin-bottom: 1.5rem;
+  }
+</style>
+{% endblock %}
+
+{% block nav %}
+<nav class="navbar">
+  <span class="navbar__brand">YNAB Financial Report</span>
+  <div class="navbar__links">
+    <a href="/">Dashboard</a>
+    <a href="/reports">Reports</a>
+    <a href="/profile" style="color: var(--text);">My Financial Profile</a>
+    <a href="/settings">Settings</a>
+  </div>
+</nav>
+{% endblock %}
+
+{% block content %}
+<div class="page-body">
+
+  <div class="page-header">
+    <span class="page-header__title">My Financial Profile</span>
+  </div>
+
+  {# ── Unfinished session notice ─────────────────────────── #}
+  {% if has_active_session %}
+  <div class="resume-notice">
+    You have an unfinished chat session. Open the chat on the
+    <a href="/" style="color: #f7c96a; text-decoration: underline;">dashboard</a>
+    to continue and end it when you&rsquo;re done.
+  </div>
+  {% endif %}
+
+  {# ── Current context block ────────────────────────────── #}
+  <div class="context-card">
+    <div class="context-card__header">
+      <span class="context-card__title">Current Context Block</span>
+      {% if current_block_text %}
+        <span style="font-size:0.8rem; color: var(--success);">&#10003; Active</span>
+      {% endif %}
+    </div>
+
+    {% if current_block_text %}
+      <div class="context-card__body">{{ current_block_text }}</div>
+    {% else %}
+      <div class="context-card__empty">
+        No financial context has been created yet.<br>
+        Start a chat on the dashboard to build your profile.
+      </div>
+    {% endif %}
+  </div>
+
+  {# ── Open Chat CTA ──────────────────────────────────────── #}
+  <div class="chat-cta">
+    <div class="chat-cta__text">
+      <strong>Update Your Profile</strong>
+      Chat with the AI to add or update your financial context.
+      Changes take effect after you click &ldquo;End Chat Session.&rdquo;
+    </div>
+    <a href="/" class="btn btn--primary" style="white-space: nowrap;">
+      Open Chat on Dashboard
+    </a>
+  </div>
+
+  {# ── Version history ────────────────────────────────────── #}
+  {% if block_history %}
+  <div class="history-panel">
+    <div class="history-panel__title">Version History</div>
+    {% for block in block_history %}
+    <div class="history-item">
+      <span class="history-item__version">v{{ block.version }}</span>
+      <span class="history-item__date">{{ block.created_at[:10] }}</span>
+      {% if not block.archived %}
+        <span class="history-item__badge history-item__badge--current">Current</span>
+      {% else %}
+        <span class="history-item__badge history-item__badge--archived">Archived</span>
+      {% endif %}
+    </div>
+    {% endfor %}
+  </div>
+  {% endif %}
+
+</div>
+{% endblock %}

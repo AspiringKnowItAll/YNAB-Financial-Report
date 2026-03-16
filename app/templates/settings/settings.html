@@ -429,6 +429,28 @@
       </div>
     </div>
 
+    {# ── Advanced ──────────────────────────────────────────────────── #}
+    <details style="margin-bottom: 1.5rem;">
+      <summary style="cursor:pointer; font-size:0.85rem; font-weight:700; text-transform:uppercase;
+                      letter-spacing:0.06em; color:var(--muted); padding-bottom:0.5rem;
+                      border-bottom:1px solid var(--border); list-style:none; user-select:none;">
+        &#9660; Advanced
+      </summary>
+      <div style="margin-top:1.25rem;">
+        <div class="form-group">
+          <label for="life_context_pre_prompt">Life Context Chat — Pre-Prompt Override</label>
+          <textarea id="life_context_pre_prompt" name="life_context_pre_prompt"
+                    rows="6" maxlength="4000"
+                    placeholder="Leave blank to use the built-in default pre-prompt."></textarea>
+          {% if has_life_context_pre_prompt %}
+          <div class="field-hint" style="color: var(--success);">&#10003; Custom pre-prompt configured. Clear this field and save to restore the default.</div>
+          {% else %}
+          <div class="field-hint">Optional. Overrides the default system prompt used by the Life Context Chat. Max 4000 characters.</div>
+          {% endif %}
+        </div>
+      </div>
+    </details>
+
     <button type="submit" class="btn btn--primary" style="min-width: 160px;">
       Save Settings
     </button>

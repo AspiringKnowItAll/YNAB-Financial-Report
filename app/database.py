@@ -24,16 +24,19 @@ async def apply_migrations() -> None:
     Add new columns to existing tables without requiring Alembic.
     Called at startup before create_all(). Each ALTER TABLE is attempted
     and silently ignored if the column already exists (SQLite behaviour).
+
+    Also performs one-time table mutations (drop user_profile — Phase 12).
     """
     _new_columns = [
-        ("app_settings", "schedule_enabled",       "BOOLEAN NOT NULL DEFAULT 0"),
-        ("app_settings", "schedule_frequency",     "VARCHAR(16)"),
-        ("app_settings", "schedule_day_of_month",  "INTEGER"),
-        ("app_settings", "schedule_day_of_week",   "VARCHAR(3)"),
-        ("app_settings", "schedule_month",         "INTEGER"),
-        ("app_settings", "schedule_report_target", "VARCHAR(16) NOT NULL DEFAULT 'previous_month'"),
-        ("app_settings", "schedule_send_email",    "BOOLEAN NOT NULL DEFAULT 0"),
-        ("app_settings", "ynab_budget_name",       "VARCHAR(256)"),
+        ("app_settings", "schedule_enabled",             "BOOLEAN NOT NULL DEFAULT 0"),
+        ("app_settings", "schedule_frequency",           "VARCHAR(16)"),
+        ("app_settings", "schedule_day_of_month",        "INTEGER"),
+        ("app_settings", "schedule_day_of_week",         "VARCHAR(3)"),
+        ("app_settings", "schedule_month",               "INTEGER"),
+        ("app_settings", "schedule_report_target",       "VARCHAR(16) NOT NULL DEFAULT 'previous_month'"),
+        ("app_settings", "schedule_send_email",          "BOOLEAN NOT NULL DEFAULT 0"),
+        ("app_settings", "ynab_budget_name",             "VARCHAR(256)"),
+        ("app_settings", "life_context_pre_prompt_enc",  "BLOB"),
     ]
     async with engine.begin() as conn:
         for table, col, definition in _new_columns:
@@ -42,9 +45,16 @@ async def apply_migrations() -> None:
             except Exception:
                 pass  # Column already exists — ignore
 
+        # Phase 12: drop the user_profile table (replaced by life context chat)
+        try:
+            await conn.execute(text("DROP TABLE IF EXISTS user_profile"))
+        except Exception:
+            pass
+
 
 async def create_all() -> None:
     """Create all database tables. Called during app lifespan startup."""
+    import app.models.life_context  # noqa: F401 — registers LifeContextSession/Block with Base
     async with engine.begin() as conn:
         await conn.run_sync(Base.metadata.create_all)
 

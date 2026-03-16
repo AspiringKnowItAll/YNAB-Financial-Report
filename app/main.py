@@ -56,15 +56,15 @@ app.mount("/static", StaticFiles(directory="app/static"), name="static")
 # Routers
 # ---------------------------------------------------------------------------
 
-from app.routers import auth, dashboard, settings, setup, reports, api, export
+from app.routers import auth, dashboard, settings, reports, api, export, life_context
 
 app.include_router(auth.router)
 app.include_router(dashboard.router)
 app.include_router(settings.router)
-app.include_router(setup.router)
 app.include_router(reports.router)
 app.include_router(api.router)
 app.include_router(export.router)
+app.include_router(life_context.router)
 
 
 # ---------------------------------------------------------------------------
@@ -103,19 +103,6 @@ async def auth_gate(request: Request, call_next):
                 return RedirectResponse("/settings", status_code=302)
         except Exception:
             pass  # DB not yet available on very first startup — let through
-
-    # Step 4: Has the user profile wizard been completed?
-    # API routes are exempt — they validate their own requirements and return JSON errors.
-    if path not in ("/settings", "/setup") and not path.startswith("/api/"):
-        try:
-            from app.models.user_profile import UserProfile
-            async with AsyncSessionLocal() as db:
-                result = await db.execute(select(UserProfile).where(UserProfile.id == 1))
-                profile = result.scalar_one_or_none()
-            if profile is None or not profile.setup_complete:
-                return RedirectResponse("/setup", status_code=302)
-        except Exception:
-            pass
 
     return await call_next(request)
 

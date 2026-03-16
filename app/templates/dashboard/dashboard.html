@@ -205,16 +205,28 @@
 <nav class="navbar">
   <span class="navbar__brand">YNAB Financial Report</span>
   <div class="navbar__links">
-    <a href="/">Dashboard</a>
+    <a href="/" style="color: var(--text);">Dashboard</a>
     <a href="/reports">Reports</a>
+    <a href="/profile">My Financial Profile</a>
     <a href="/settings">Settings</a>
-    <a href="/setup">Profile</a>
   </div>
 </nav>
 {% endblock %}
 
 {% block content %}
 <div class="page-body">
+
+  {# ── Life context nudge banner ────────────────────────────── #}
+  {% if show_context_nudge %}
+  <div id="life-context-nudge" class="alert alert--warning" style="display:flex;align-items:center;justify-content:space-between;gap:1rem;margin-bottom:1.25rem;">
+    <span>Your AI reports don&rsquo;t have any personal context yet.</span>
+    <button type="button" class="btn btn--primary"
+            style="padding:0.4rem 0.85rem;font-size:0.82rem;white-space:nowrap;"
+            onclick="document.getElementById('chat-fab').click();">
+      Start Your Financial Profile &rarr;
+    </button>
+  </div>
+  {% endif %}
 
   {# ── Page header ──────────────────────────────────────────── #}
   <div class="page-header">
@@ -399,6 +411,7 @@
 </script>
 {% endif %}
 
+<script src="/static/js/chat_widget.js"></script>
 <script>
 document.getElementById('sync-btn').addEventListener('click', async function () {
   var btn = this;
