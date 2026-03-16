@@ -375,7 +375,6 @@ These bugs and UX gaps were discovered during the first real end-to-end run of t
 - `get_ai_provider_from_params(provider_name, api_key, base_url)` factory added to `ai_service.py`. Builds an `AIProvider` from plaintext form values without requiring a DB record or encryption. Used by `/api/test/ai`.
 
 ### Known Issues Still To Address
-- **First-run form**: Logs previously showed a `422 Unprocessable Entity` on the first master password POST — not reproduced during clean test container run; may have been a transient issue. Monitor but deprioritize.
 - **Dashboard**: First real-world view — visual and functional review needed.
 
 ---
