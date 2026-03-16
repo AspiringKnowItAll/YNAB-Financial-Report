@@ -247,12 +247,10 @@
         No sync has been run yet.
       {% endif %}
     </div>
-    <form method="post" action="/api/sync/trigger">
-      <button type="submit" class="btn btn--primary"
-              style="padding: 0.45rem 1rem; font-size: 0.85rem;">
-        Sync Now
-      </button>
-    </form>
+    <button type="button" id="sync-btn" class="btn btn--primary"
+            style="padding: 0.45rem 1rem; font-size: 0.85rem;">
+      Sync Now
+    </button>
   </div>
 
   {% if not has_data %}
@@ -400,4 +398,37 @@
   {% endif %}
 </script>
 {% endif %}
+
+<script>
+document.getElementById('sync-btn').addEventListener('click', async function () {
+  var btn = this;
+  var infoEl = document.querySelector('.sync-bar__info');
+  btn.disabled = true;
+  btn.textContent = 'Syncing\u2026';
+  infoEl.innerHTML = '<span class="sync-dot sync-dot--running"></span> Sync <strong>in progress</strong>\u2026';
+
+  try {
+    var resp = await fetch('/api/sync/trigger', { method: 'POST' });
+    var data = await resp.json();
+    if (resp.ok && data.status === 'success') {
+      infoEl.innerHTML =
+        '<span class="sync-dot sync-dot--success"></span> Sync complete &mdash; ' +
+        data.transactions_added + ' added, ' +
+        data.transactions_updated + ' updated';
+      setTimeout(function () { location.reload(); }, 1200);
+    } else {
+      infoEl.innerHTML =
+        '<span class="sync-dot sync-dot--failed"></span> Sync <strong>failed</strong>' +
+        (data.detail ? ' &mdash; ' + data.detail : '');
+      btn.disabled = false;
+      btn.textContent = 'Sync Now';
+    }
+  } catch (err) {
+    infoEl.innerHTML =
+      '<span class="sync-dot sync-dot--failed"></span> Sync <strong>failed</strong> &mdash; ' + err.message;
+    btn.disabled = false;
+    btn.textContent = 'Sync Now';
+  }
+});
+</script>
 {% endblock %}
