@@ -1,0 +1,114 @@
+{% extends "base.html" %}
+
+{% block title %}{{ dashboard.name }} — YNAB Financial Report{% endblock %}
+
+{% block extra_head %}
+<link rel="stylesheet" href="/static/css/dashboard.css">
+{# global_custom_css is already injected by base.html — do not add it here again.
+   SECURITY NOTE: dashboard.custom_css is intentionally injected unsanitized.
+   Single-user self-hosted app; CSS injection is not in scope.
+   Do not change | safe to auto-escape. See docs/phase14_plan.md §Security Notes. #}
+{% if dashboard.custom_css %}
+<style id="dashboard-custom-css">{{ dashboard.custom_css | safe }}</style>
+{% endif %}
+{% endblock %}
+
+{% block nav %}
+<nav class="navbar">
+  <span class="navbar__brand">YNAB Financial Report</span>
+  <div class="navbar__links">
+    <a href="/" style="color: var(--text);">Dashboard</a>
+    <a href="/reports">Reports</a>
+    <a href="/profile">My Financial Profile</a>
+    <a href="/settings">Settings</a>
+  </div>
+</nav>
+{% endblock %}
+
+{% block content %}
+<div class="dash-layout">
+
+  {# ── Dock toggle (narrow viewports) ─────────────────────── #}
+  <button type="button" class="dock-toggle" id="dock-toggle" aria-label="Toggle dashboard sidebar">
+    <svg width="20" height="20" viewBox="0 0 20 20" fill="currentColor">
+      <rect y="3" width="20" height="2" rx="1"/>
+      <rect y="9" width="20" height="2" rx="1"/>
+      <rect y="15" width="20" height="2" rx="1"/>
+    </svg>
+  </button>
+
+  {# ── Left dock ──────────────────────────────────────────── #}
+  <aside class="dash-dock" id="dash-dock">
+    <div class="dash-dock__header">Dashboards</div>
+    <ul class="dash-dock__list">
+      {% for d in all_dashboards %}
+      <li>
+        <a href="/dashboards/{{ d.id }}"
+           class="dash-dock__item{% if d.id == dashboard.id %} dash-dock__item--active{% endif %}">
+          {{ d.name }}
+          {% if d.is_default %}
+          <span class="dash-dock__badge">Default</span>
+          {% endif %}
+        </a>
+      </li>
+      {% endfor %}
+    </ul>
+    <div class="dash-dock__footer">
+      <a href="/dashboards/new" class="dash-dock__item">+ New Dashboard</a>
+      <a href="/dashboards" class="dash-dock__item" style="font-size: 0.8rem; color: var(--muted);">All Dashboards</a>
+    </div>
+  </aside>
+
+  {# ── Main content ───────────────────────────────────────── #}
+  <main class="dash-main">
+    <div class="dash-main__header">
+      <div>
+        <h1 class="dash-main__title">{{ dashboard.name }}</h1>
+        {% if dashboard.description %}
+        <p class="dash-main__desc">{{ dashboard.description }}</p>
+        {% endif %}
+      </div>
+      <div style="display: flex; gap: 0.5rem;">
+        <button type="button" class="btn" style="padding: 0.4rem 0.85rem; font-size: 0.82rem; background: var(--border); color: var(--muted); cursor: not-allowed;" disabled>
+          Edit Dashboard
+        </button>
+      </div>
+    </div>
+
+    {% if widgets %}
+    <div class="widget-grid" data-columns="{{ dashboard.grid_columns }}">
+      {% for widget in widgets %}
+      <div class="grid-stack-item widget-card"
+           data-dashboard-id="{{ dashboard.id }}"
+           data-widget-id="{{ widget.id }}"
+           gs-x="{{ widget.grid_x }}"
+           gs-y="{{ widget.grid_y }}"
+           gs-w="{{ widget.grid_w }}"
+           gs-h="{{ widget.grid_h }}">
+        <div class="grid-stack-item-content">
+          <div class="widget-header">
+            <span class="widget-header__title">{{ widget.widget_type | replace('_', ' ') | title }}</span>
+            <span class="spinner" id="spinner-{{ widget.id }}"></span>
+          </div>
+          <div class="widget-body" id="widget-body-{{ widget.id }}">
+            <div class="widget-body__loading">Loading...</div>
+          </div>
+        </div>
+      </div>
+      {% endfor %}
+    </div>
+    {% else %}
+    <div class="card" style="text-align: center; padding: 3rem; margin-top: 1rem;">
+      <p style="font-size: 1.1rem; font-weight: 600; margin-bottom: 0.5rem;">No widgets on this dashboard</p>
+      <p style="color: var(--muted); font-size: 0.9rem;">
+        Widgets will be added in edit mode (coming in Milestone 2).
+      </p>
+    </div>
+    {% endif %}
+  </main>
+
+</div>
+
+<script src="/static/js/chat_widget.js"></script>
+<script src="/static/js/dashboard_view.js"></script>
+{% endblock %}

@@ -44,10 +44,11 @@ app.mount("/static", StaticFiles(directory="app/static"), name="static")
 # Routers
 # ---------------------------------------------------------------------------
 
-from app.routers import auth, dashboard, settings, reports, api, export, life_context, import_data  # noqa: E402
+from app.routers import auth, dashboards, api_dashboards, settings, reports, api, export, life_context, import_data  # noqa: E402
 
 app.include_router(auth.router)
-app.include_router(dashboard.router)
+app.include_router(dashboards.router)
+app.include_router(api_dashboards.router)
 app.include_router(settings.router)
 app.include_router(reports.router)
 app.include_router(api.router)

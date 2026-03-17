@@ -17,7 +17,9 @@
       "Read(//c/Users/Andrew/ Lucas/Documents/GitHub/YNAB-Financial-Report/**)",
       "WebFetch(domain:github.com)",
       "WebFetch(domain:ollama.com)",
-      "WebFetch(domain:raw.githubusercontent.com)"
+      "WebFetch(domain:raw.githubusercontent.com)",
+      "Bash(docker:*)",
+      "Bash(docker-compose:*)"
     ],
     "additionalDirectories": [
       "c:\\Users\\Andrew Lucas\\.claude\\projects\\c--Users-Andrew-Lucas-Documents-GitHub-YNAB-Financial-Report\\memory"

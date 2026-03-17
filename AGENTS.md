@@ -348,7 +348,7 @@ Outlier exclusions must be stored in `report_snapshots.outliers_excluded` (JSON 
 | 12.5 — Database Encryption | Complete | SQLCipher whole-database encryption (AES-256); one-time plaintext→encrypted migration; lazy DB init after unlock |
 | 13 — External Data Import | Complete | Upload PDF/CSV financial documents; AI normalizes to transaction records or balance snapshots; user reviews + corrects via chat; confirms before saving; external accounts and transactions included in AI report prompt |
 | 13.5 — Security Hardening | Complete | All critical/high/medium findings from the 2026-03-17 code audit addressed: vision AIProvider abstraction, TOCTOU lock, Pydantic row validation, get_running_loop fix, SSE error redaction, month validation, non-root Docker user, SQLCipher fail-fast, atomic recovery key write, boolean form parsing. |
-| 14 — Dashboard Redesign | Deferred | Full dashboard redesign after Phase 12 + 13 data sources are in place; will include external accounts, net worth, richer dynamic charts |
+| 14 — Dashboard Redesign | In Progress — M1 next | Multi-dashboard builder: named dashboards, left dock, WYSIWYG gridstack.js editor, configurable column grid, per-widget filters (time period, accounts, categories), 15 widget types, per-dashboard + global custom CSS, net worth snapshots, projection widgets. Spec: docs/phase14_plan.md |
 
 ---
 
@@ -463,7 +463,7 @@ A three-reviewer code audit (Codex, Gemini, Claude) was completed on 2026-03-17.
 
 ## V2 Roadmap (Phases 12–14)
 
-Phases 12, 12.5, 13, and 13.5 are complete. Phase 14 is next. See the implementation status table.
+Phases 12, 12.5, 13, and 13.5 are complete. Phase 14 (Dashboard Redesign) is in progress — Milestone 1 is next. See the implementation status table and [`docs/phase14_plan.md`](docs/phase14_plan.md).
 
 ### Phase 12 — Life Context Chat ✓ Complete
 
@@ -539,11 +539,54 @@ See the Phase 13 section above for a full list of changed files.
 
 ---
 
+### Phase 14 — Dashboard Redesign (In Progress)
+
+> **Full specification in [`docs/phase14_plan.md`](docs/phase14_plan.md).**
+
+**Goal:** Replace the static single-page dashboard with a multi-dashboard builder system. Users create multiple named dashboards, each with independently configurable widgets laid out on a drag-resize-snap grid (gridstack.js, MIT license). All widget filters — time period, included accounts (YNAB + external), excluded categories — are per-widget for maximum flexibility.
+
+**Key features:**
+- Named dashboards with a persistent left dock for quick switching; user-selectable default
+- WYSIWYG edit mode: drag/resize/snap to configurable column grid (6/8/12/16/24 columns)
+- Dashboard-level default time period (convenience; each widget overrides freely)
+- 15 widget types: summary cards, trend charts, breakdowns, stats tables, projection charts — all user-selectable
+- Per-widget configuration: time period, account scope, category exclusions
+- Per-dashboard custom CSS (unencrypted, stored in `Dashboard.custom_css`)
+- Global custom CSS (Fernet-encrypted, stored in `AppSettings.custom_css_enc`)
+- Net worth history via `NetWorthSnapshot` table — one row written per sync
+- Savings/investment projection widgets (uses `AppSettings.projection_expected_return_rate`)
+
+**New files:**
+- `app/models/dashboard.py` — Dashboard, DashboardWidget, NetWorthSnapshot
+- `app/routers/dashboards.py` — HTML routes
+- `app/routers/api_dashboards.py` — API routes (CRUD + widget data endpoint)
+- `app/schemas/dashboard.py`
+- `app/services/widget_service.py` — widget data dispatch (DB only, no HTTP)
+- `app/templates/dashboards/` — dashboard_list, dashboard_view, dashboard_edit, dashboard_new, partials/
+- `app/static/css/dashboard.css`
+- `app/static/js/dashboard_view.js`
+- `app/static/js/dashboard_builder.js`
+- `app/static/js/vendor/gridstack/` (MIT license — copyright notice MUST be preserved in file header)
+
+**Modified files:**
+- `app/models/settings.py` — `custom_css_enc`, `projection_expected_return_rate`, `projection_retirement_target`
+- `app/database.py` — new models in `create_all()`; migrations for new tables + new AppSettings columns
+- `app/main.py` — register new routers; remove old `dashboard.py` router; update `/` redirect
+- `app/routers/dashboard.py` — **DELETED** (replaced by `dashboards.py`)
+- `app/services/sync_service.py` — write `NetWorthSnapshot` on each successful sync
+- `app/templates/base.html` — global CSS injection
+- `app/templates/settings/settings.html` — Appearance section (M6) + Financial Projections section (M5)
+- `app/routers/settings.py` — handle new AppSettings fields
+
+**Milestones:** M1 Foundation → M2 Builder (gridstack) → M3 Existing Widgets → M4 New Widgets → M5 Projections → M6 Global CSS → M7 Reports Integration (TBD)
+
+**gridstack.js attribution:** MIT license. Copyright (c) 2021-present Alain Dumesny, Dylan Weiss, Lyor Goldstein. Copyright notice must be preserved in `app/static/js/vendor/gridstack/gridstack.js` header. No UI attribution required.
+
+---
+
 ## Deferred Features
 
 Do not implement these until explicitly requested:
-
-- **Dashboard redesign** (Phase 14) — deferred until Phase 12 + 13 data sources are available; dashboard needs to show net worth, external accounts, and richer cross-source charts
 - **Notion sync** — `notion_service.py` stub exists; integration deferred
 - **Rolling report windows** — "last 30 days" or arbitrary date-range reports; requires pipeline redesign (currently month-based YYYY-MM only)
 - Per-month user annotations on reports

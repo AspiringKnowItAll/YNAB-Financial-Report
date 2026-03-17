@@ -2,6 +2,8 @@ import asyncio
 import logging
 import os
 from collections.abc import AsyncGenerator
+from datetime import datetime as _dt
+from datetime import timezone as _tz
 from pathlib import Path
 
 import aiosqlite.core
@@ -147,7 +149,11 @@ async def apply_migrations() -> None:
         ("app_settings", "schedule_report_target",       "VARCHAR(16) NOT NULL DEFAULT 'previous_month'"),
         ("app_settings", "schedule_send_email",          "BOOLEAN NOT NULL DEFAULT 0"),
         ("app_settings", "ynab_budget_name",             "VARCHAR(256)"),
-        ("app_settings", "life_context_pre_prompt_enc",  "BLOB"),
+        ("app_settings", "life_context_pre_prompt_enc",          "BLOB"),
+        # Phase 14
+        ("app_settings", "custom_css_enc",                       "BLOB"),
+        ("app_settings", "projection_expected_return_rate",      "REAL"),
+        ("app_settings", "projection_retirement_target",         "INTEGER"),
     ]
     async with engine.begin() as conn:
         for table, col, definition in _new_columns:
@@ -162,11 +168,76 @@ async def apply_migrations() -> None:
         except Exception:
             pass
 
+        # Phase 14: create dashboard tables if not yet present, then seed default
+        await conn.execute(text("""
+            CREATE TABLE IF NOT EXISTS dashboard (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                name TEXT NOT NULL,
+                description TEXT,
+                is_default BOOLEAN NOT NULL DEFAULT 0,
+                grid_columns INTEGER NOT NULL DEFAULT 12,
+                default_time_period VARCHAR(32),
+                custom_css TEXT,
+                created_at VARCHAR(32) NOT NULL,
+                updated_at VARCHAR(32) NOT NULL
+            )
+        """))
+        await conn.execute(text("""
+            CREATE TABLE IF NOT EXISTS dashboard_widget (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                dashboard_id INTEGER NOT NULL REFERENCES dashboard(id),
+                widget_type VARCHAR(64) NOT NULL,
+                grid_x INTEGER NOT NULL DEFAULT 0,
+                grid_y INTEGER NOT NULL DEFAULT 0,
+                grid_w INTEGER NOT NULL DEFAULT 4,
+                grid_h INTEGER NOT NULL DEFAULT 3,
+                config_json TEXT NOT NULL DEFAULT '{}',
+                created_at VARCHAR(32) NOT NULL,
+                updated_at VARCHAR(32) NOT NULL
+            )
+        """))
+        await conn.execute(text("""
+            CREATE TABLE IF NOT EXISTS net_worth_snapshot (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                budget_id VARCHAR(64) NOT NULL,
+                snapped_at VARCHAR(10) NOT NULL,
+                ynab_balance_milliunits INTEGER NOT NULL
+            )
+        """))
+        # Seed a default dashboard on Phase 14 first-run if none exist
+        _now = _dt.now(_tz.utc).isoformat()
+        _count_result = await conn.execute(text("SELECT COUNT(*) FROM dashboard"))
+        _count = _count_result.scalar()
+        if _count == 0:
+            await conn.execute(text(
+                "INSERT INTO dashboard (name, description, is_default, grid_columns, "
+                "default_time_period, custom_css, created_at, updated_at) "
+                "VALUES ('Default Dashboard', 'Auto-created on Phase 14 upgrade', 1, 12, "
+                "'last_12_months', NULL, :now, :now)"
+            ), {"now": _now})
+            _id_result = await conn.execute(text("SELECT last_insert_rowid()"))
+            _dash_id = _id_result.scalar()
+            _default_widgets = [
+                ("income_card",           0,  0, 4, 3),
+                ("spending_card",         4,  0, 4, 3),
+                ("net_savings_card",      8,  0, 4, 3),
+                ("net_worth_card",        0,  3, 4, 3),
+                ("income_spending_trend", 0,  6, 12, 5),
+                ("category_breakdown",    0, 11, 12, 6),
+            ]
+            for _wt, _gx, _gy, _gw, _gh in _default_widgets:
+                await conn.execute(text(
+                    "INSERT INTO dashboard_widget (dashboard_id, widget_type, grid_x, grid_y, "
+                    "grid_w, grid_h, config_json, created_at, updated_at) "
+                    "VALUES (:did, :wt, :gx, :gy, :gw, :gh, '{}', :now, :now)"
+                ), {"did": _dash_id, "wt": _wt, "gx": _gx, "gy": _gy, "gw": _gw, "gh": _gh, "now": _now})
+
 
 async def create_all() -> None:
     """Create all database tables. Called during app lifespan startup."""
     import app.models.life_context  # noqa: F401 — registers LifeContextSession/Block with Base
     import app.models.import_data   # noqa: F401 — registers InstitutionProfile/ImportSession/ExternalAccount/ExternalTransaction/ExternalBalance with Base
+    import app.models.dashboard     # noqa: F401 — registers Dashboard/DashboardWidget/NetWorthSnapshot with Base
     async with engine.begin() as conn:
         await conn.run_sync(Base.metadata.create_all)
 

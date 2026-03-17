@@ -1,4 +1,4 @@
-from sqlalchemy import Boolean, Integer, LargeBinary, String
+from sqlalchemy import Boolean, Float, Integer, LargeBinary, String
 from sqlalchemy.orm import Mapped, mapped_column
 
 from app.database import Base
@@ -52,6 +52,15 @@ class AppSettings(Base):
 
     # Life context chat
     life_context_pre_prompt_enc: Mapped[bytes | None] = mapped_column(LargeBinary, nullable=True)
+
+    # Phase 14 — global custom CSS (Fernet-encrypted, defense-in-depth)
+    # SECURITY NOTE: Encrypted consistent with all other LargeBinary AppSettings fields.
+    # The CSS itself is not a secret, but encryption is applied uniformly.
+    custom_css_enc: Mapped[bytes | None] = mapped_column(LargeBinary, nullable=True)
+
+    # Phase 14 — financial projection parameters
+    projection_expected_return_rate: Mapped[float | None] = mapped_column(Float, nullable=True)
+    projection_retirement_target: Mapped[int | None] = mapped_column(Integer, nullable=True)
 
     # Wizard completion flag
     settings_complete: Mapped[bool] = mapped_column(Boolean, default=False)

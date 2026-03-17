@@ -1,0 +1,111 @@
+{% extends "base.html" %}
+
+{% block title %}Dashboards — YNAB Financial Report{% endblock %}
+
+{% block extra_head %}
+<link rel="stylesheet" href="/static/css/dashboard.css">
+{% endblock %}
+
+{% block nav %}
+<nav class="navbar">
+  <span class="navbar__brand">YNAB Financial Report</span>
+  <div class="navbar__links">
+    <a href="/" style="color: var(--text);">Dashboard</a>
+    <a href="/reports">Reports</a>
+    <a href="/profile">My Financial Profile</a>
+    <a href="/settings">Settings</a>
+  </div>
+</nav>
+{% endblock %}
+
+{% block content %}
+<div class="container container--wide" style="max-width: 960px;">
+
+  <div style="display: flex; align-items: baseline; justify-content: space-between; margin-bottom: 1.5rem;">
+    <h1 style="font-size: 1.3rem; font-weight: 700;">All Dashboards</h1>
+    <a href="/dashboards/new" class="btn btn--primary" style="text-decoration: none; font-size: 0.9rem;">
+      New Dashboard
+    </a>
+  </div>
+
+  {% if all_dashboards %}
+  <div style="display: grid; grid-template-columns: repeat(auto-fill, minmax(280px, 1fr)); gap: 1rem;">
+    {% for dash in all_dashboards %}
+    <div class="card" style="padding: 1.25rem;">
+      <div style="display: flex; align-items: center; gap: 0.5rem; margin-bottom: 0.5rem;">
+        <span style="font-size: 1.1rem; font-weight: 600;">{{ dash.name }}</span>
+        {% if dash.is_default %}
+        <span style="font-size: 0.7rem; background: var(--accent); color: #fff; border-radius: 4px; padding: 0.1rem 0.5rem; font-weight: 600;">DEFAULT</span>
+        {% endif %}
+      </div>
+      {% if dash.description %}
+      <p style="font-size: 0.85rem; color: var(--muted); margin-bottom: 0.75rem;">{{ dash.description }}</p>
+      {% endif %}
+      <p style="font-size: 0.8rem; color: var(--muted); margin-bottom: 1rem;">
+        {{ widget_counts.get(dash.id, 0) }} widget{{ 's' if widget_counts.get(dash.id, 0) != 1 else '' }}
+        &middot; {{ dash.grid_columns }}-column grid
+      </p>
+      <div style="display: flex; gap: 0.5rem; flex-wrap: wrap;">
+        <a href="/dashboards/{{ dash.id }}" class="btn btn--primary" style="padding: 0.4rem 0.85rem; font-size: 0.82rem; text-decoration: none;">
+          View
+        </a>
+        {% if not dash.is_default %}
+        <button type="button" class="btn" style="padding: 0.4rem 0.85rem; font-size: 0.82rem; background: var(--border); color: var(--text);"
+                onclick="setDefault({{ dash.id }})">
+          Set Default
+        </button>
+        {% endif %}
+        <button type="button" class="btn" style="padding: 0.4rem 0.85rem; font-size: 0.82rem; background: transparent; color: var(--danger); border: 1px solid var(--danger);"
+                onclick="deleteDashboard({{ dash.id }}, '{{ dash.name | e }}')">
+          Delete
+        </button>
+      </div>
+    </div>
+    {% endfor %}
+  </div>
+  {% else %}
+  <div class="card" style="text-align: center; padding: 3rem;">
+    <p style="font-size: 1.1rem; font-weight: 600; margin-bottom: 0.5rem;">No dashboards yet</p>
+    <p style="color: var(--muted); font-size: 0.9rem; margin-bottom: 1.25rem;">
+      Create your first dashboard to get started.
+    </p>
+    <a href="/dashboards/new" class="btn btn--primary" style="text-decoration: none;">
+      New Dashboard
+    </a>
+  </div>
+  {% endif %}
+
+</div>
+
+<script src="/static/js/chat_widget.js"></script>
+<script>
+async function setDefault(id) {
+  try {
+    var resp = await fetch('/api/dashboards/' + id + '/default', { method: 'PUT' });
+    if (resp.ok) {
+      location.reload();
+    } else {
+      var data = await resp.json();
+      alert(data.detail || 'Failed to set default');
+    }
+  } catch (err) {
+    alert('Error: ' + err.message);
+  }
+}
+
+async function deleteDashboard(id, name) {
+  if (!confirm('Delete dashboard "' + name + '"? This cannot be undone.')) return;
+  try {
+    var resp = await fetch('/api/dashboards/' + id, { method: 'DELETE' });
+    if (resp.ok) {
+      location.reload();
+    } else {
+      var data = await resp.json();
+      alert(data.detail || 'Failed to delete dashboard');
+    }
+  } catch (err) {
+    alert('Error: ' + err.message);
+  }
+}
+</script>
+{% endblock %}

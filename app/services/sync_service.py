@@ -14,6 +14,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.models.account import Account
 from app.models.budget import Budget, Category, CategoryGroup
+from app.models.dashboard import NetWorthSnapshot
 from app.models.report import SyncLog
 from app.models.transaction import Transaction
 from app.services.ynab_client import YnabClient
@@ -219,6 +220,36 @@ async def run_sync(db: AsyncSession, api_key: str, budget_id: str) -> SyncLog:
         sync_log.transactions_added = transactions_added
         sync_log.transactions_updated = transactions_updated
         sync_log.knowledge_of_server = txn_response.server_knowledge
+
+        # Phase 14: upsert on-budget YNAB net worth snapshot for net_worth_trend widget.
+        # Use UTC date to stay consistent with all other timestamps in the codebase.
+        # Upsert (update if same budget_id+date already exists) prevents duplicates
+        # when the user syncs more than once in the same calendar day.
+        _today_utc = datetime.now(timezone.utc).date().isoformat()
+        _nw_result = await db.execute(
+            select(Account).where(
+                Account.budget_id == budget_id,
+                Account.deleted.is_(False),
+                Account.closed.is_(False),
+                Account.on_budget.is_(True),
+            )
+        )
+        _ynab_balance = sum(a.balance for a in _nw_result.scalars().all())
+        _existing_snap = await db.execute(
+            select(NetWorthSnapshot).where(
+                NetWorthSnapshot.budget_id == budget_id,
+                NetWorthSnapshot.snapped_at == _today_utc,
+            )
+        )
+        _snap = _existing_snap.scalar_one_or_none()
+        if _snap is not None:
+            _snap.ynab_balance_milliunits = _ynab_balance
+        else:
+            db.add(NetWorthSnapshot(
+                budget_id=budget_id,
+                snapped_at=_today_utc,
+                ynab_balance_milliunits=_ynab_balance,
+            ))
 
         await db.commit()
         logger.info(

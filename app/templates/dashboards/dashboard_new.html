@@ -1,0 +1,109 @@
+{% extends "base.html" %}
+
+{% block title %}New Dashboard — YNAB Financial Report{% endblock %}
+
+{% block extra_head %}
+<link rel="stylesheet" href="/static/css/dashboard.css">
+{% endblock %}
+
+{% block nav %}
+<nav class="navbar">
+  <span class="navbar__brand">YNAB Financial Report</span>
+  <div class="navbar__links">
+    <a href="/" style="color: var(--text);">Dashboard</a>
+    <a href="/reports">Reports</a>
+    <a href="/profile">My Financial Profile</a>
+    <a href="/settings">Settings</a>
+  </div>
+</nav>
+{% endblock %}
+
+{% block content %}
+<div class="container" style="max-width: 520px;">
+  <div class="card">
+    <div class="card__title">New Dashboard</div>
+    <div class="card__subtitle">Create a custom dashboard with your own widgets.</div>
+
+    <form id="new-dashboard-form">
+      <div class="form-group">
+        <label for="name">Name<span class="required-mark">*</span></label>
+        <input type="text" id="name" name="name" required maxlength="256"
+               placeholder="e.g. Monthly Overview">
+      </div>
+
+      <div class="form-group">
+        <label for="description">Description</label>
+        <textarea id="description" name="description" rows="2"
+                  placeholder="Optional — what is this dashboard for?"></textarea>
+      </div>
+
+      <div class="form-group">
+        <label for="grid_columns">Grid Columns</label>
+        <select id="grid_columns" name="grid_columns">
+          <option value="6">6 columns</option>
+          <option value="8">8 columns</option>
+          <option value="12" selected>12 columns (default)</option>
+          <option value="16">16 columns</option>
+          <option value="24">24 columns</option>
+        </select>
+      </div>
+
+      <div id="form-error" class="alert alert--error" style="display: none;"></div>
+
+      <button type="submit" class="btn btn--primary btn--block" id="create-btn">
+        Create Dashboard
+      </button>
+    </form>
+  </div>
+</div>
+
+<script src="/static/js/chat_widget.js"></script>
+<script>
+document.getElementById('new-dashboard-form').addEventListener('submit', async function(e) {
+  e.preventDefault();
+  var btn = document.getElementById('create-btn');
+  var errEl = document.getElementById('form-error');
+  errEl.style.display = 'none';
+  btn.disabled = true;
+  btn.textContent = 'Creating\u2026';
+
+  var name = document.getElementById('name').value.trim();
+  var description = document.getElementById('description').value.trim() || null;
+  var gridColumns = parseInt(document.getElementById('grid_columns').value, 10);
+
+  if (!name) {
+    errEl.textContent = 'Name is required.';
+    errEl.style.display = 'block';
+    btn.disabled = false;
+    btn.textContent = 'Create Dashboard';
+    return;
+  }
+
+  try {
+    var resp = await fetch('/api/dashboards', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        name: name,
+        description: description,
+        grid_columns: gridColumns
+      })
+    });
+    var data = await resp.json();
+    if (resp.ok && data.id) {
+      window.location.href = '/dashboards/' + data.id;
+    } else {
+      errEl.textContent = data.detail || 'Failed to create dashboard.';
+      errEl.style.display = 'block';
+      btn.disabled = false;
+      btn.textContent = 'Create Dashboard';
+    }
+  } catch (err) {
+    errEl.textContent = 'Error: ' + err.message;
+    errEl.style.display = 'block';
+    btn.disabled = false;
+    btn.textContent = 'Create Dashboard';
+  }
+});
+</script>
+{% endblock %}

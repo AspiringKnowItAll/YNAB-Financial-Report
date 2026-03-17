@@ -323,6 +323,12 @@
       letter-spacing: 0.1em;
     }
   </style>
+  {# Phase 14: Global custom CSS — intentionally injected unsanitized.
+     This is a single-user self-hosted app; CSS injection attacks are not in scope.
+     Do not change | safe to auto-escape. See docs/phase14_plan.md §Security Notes. #}
+  {% if global_custom_css is defined and global_custom_css %}
+  <style id="global-custom-css">{{ global_custom_css | safe }}</style>
+  {% endif %}
   {% block extra_head %}{% endblock %}
 </head>
 <body>
