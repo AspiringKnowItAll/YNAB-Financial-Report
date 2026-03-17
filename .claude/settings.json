@@ -8,7 +8,16 @@
       "Bash(python -m pytest tests/unit/test_schemas.py -v)",
       "Bash(python -m pytest tests/unit/test_schemas.py -v --tb=short)",
       "Bash(python -m pytest tests/ -v --tb=short)",
-      "Bash(sqlite3 \"c:\\\\Users\\\\Andrew Lucas\\\\Documents\\\\GitHub\\\\YNAB-Financial-Report\\\\data\\\\ynab_report.db\" \"SELECT id, version, created_at, archived FROM life_context_blocks;\")"
+      "Bash(sqlite3 \"c:\\\\Users\\\\Andrew Lucas\\\\Documents\\\\GitHub\\\\YNAB-Financial-Report\\\\data\\\\ynab_report.db\" \"SELECT id, version, created_at, archived FROM life_context_blocks;\")",
+      "Read(//c/Users/Andrew/ Lucas/Documents/GitHub/YNAB-Financial-Report/app/routers/**)",
+      "Read(//c/Users/Andrew/ Lucas/Documents/GitHub/YNAB-Financial-Report/app/models/**)",
+      "Read(//c/Users/Andrew/ Lucas/Documents/GitHub/YNAB-Financial-Report/app/services/**)",
+      "Read(//c/Users/Andrew/ Lucas/Documents/GitHub/YNAB-Financial-Report/app/templates/dashboard/**)",
+      "Read(//c/Users/Andrew/ Lucas/Documents/GitHub/YNAB-Financial-Report/app/**)",
+      "Read(//c/Users/Andrew/ Lucas/Documents/GitHub/YNAB-Financial-Report/**)",
+      "WebFetch(domain:github.com)",
+      "WebFetch(domain:ollama.com)",
+      "WebFetch(domain:raw.githubusercontent.com)"
     ],
     "additionalDirectories": [
       "c:\\Users\\Andrew Lucas\\.claude\\projects\\c--Users-Andrew-Lucas-Documents-GitHub-YNAB-Financial-Report\\memory"

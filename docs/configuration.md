@@ -204,6 +204,31 @@ To revert to the default, clear the textarea and save — an empty field restore
 
 ---
 
+## Data Security
+
+All financial data is encrypted at rest. The app uses a two-layer encryption architecture:
+
+### Layer 1: Whole-Database Encryption (SQLCipher)
+
+The SQLite database file (`/data/ynab_report.db`) is encrypted using **SQLCipher** (AES-256). Every byte of the database — including all transaction data, account names, balances, category names, and AI-generated report content — is encrypted on disk.
+
+- The encryption key is derived from your **master password** using Argon2id
+- The key is held in memory only while the app is unlocked and is never written to disk
+- The database cannot be opened or read without the master password — even with direct access to the Docker volume or backup files, the data is inaccessible
+- Opening the database file with a standard SQLite tool returns "file is not a database"
+
+### Layer 2: Field-Level Encryption (Fernet — Defense in Depth)
+
+API keys, passwords, and tokens stored in the settings database receive an **additional** layer of Fernet encryption (AES-128-CBC + HMAC-SHA256) on top of the whole-database encryption. This provides defense in depth for the most sensitive credentials.
+
+### What This Means for You
+
+- **Your financial data is safe** even if someone gains access to your server, Docker volume, or backup files
+- **No configuration required** — encryption is automatic and transparent
+- **If you lose your master password**, your data cannot be recovered (unless you have a recovery code). This is by design — it means no one else can recover it either
+
+---
+
 ## Environment Variable Summary
 
 | Variable | Where set | Required | Default | Description |

@@ -35,7 +35,8 @@ These rules apply to every change made to this codebase, no matter how small. Vi
 This app handles personal financial data. These requirements are mandatory:
 
 - **No secrets in code.** API keys, passwords, and tokens must never appear in source files, logs, or error messages. Use `APP_SECRET_KEY` and the `encryption.py` service for all stored secrets.
-- **Encrypt all secrets at rest.** Any value stored in the database that is a credential, token, or password must be encrypted with `services/encryption.py` before writing and decrypted only in memory when needed.
+- **Encrypt all financial data at rest.** The SQLite database is encrypted at the file level using SQLCipher (AES-256). The encryption key is derived from the user's master password and held in memory only. The database is completely inaccessible without the master password — there is no plaintext financial data on disk at any time during normal operation. This is non-negotiable.
+- **Encrypt all secrets at rest (defense in depth).** In addition to whole-database encryption, API keys, passwords, and tokens stored in `app_settings` receive a second layer of field-level Fernet encryption via `services/encryption.py`. This ensures credentials remain protected even if the database encryption layer is somehow bypassed.
 - **Validate and sanitize all inputs.** Every user-submitted value must pass through a Pydantic schema at the router boundary before reaching any service layer. See the Input Sanitization section below.
 - **No raw SQL.** All database access must use the SQLAlchemy ORM. Parameterized queries are the only acceptable fallback if raw SQL is ever truly required (it shouldn't be).
 - **Principle of least privilege.** Services should only have access to the data and capabilities they need. Don't pass full settings objects to services that only need one field.
@@ -74,9 +75,10 @@ This app handles personal financial data. These requirements are mandatory:
 | Language | Python 3.12 | Strong data/analysis ecosystem, memory-safe, widely understood |
 | Web framework | FastAPI (async) | Modern, async-first, automatic validation via Pydantic, great performance |
 | Database ORM | SQLAlchemy (async) + aiosqlite | Type-safe DB access, prevents SQL injection, async-compatible |
-| Database | SQLite | Zero-config, file-based, ships inside the Docker volume — no external DB needed |
+| Database | SQLite + SQLCipher | Zero-config, file-based, ships inside Docker volume; entire DB file encrypted with AES-256 via SQLCipher |
+| DB encryption | `sqlcipher3-binary` (SQLCipher) | AES-256-CBC whole-database encryption; transparent to queries; key derived from master password |
 | Key derivation | `argon2-cffi` (Argon2id) | Industry-standard password hashing / KDF; derives encryption key from master password |
-| Encryption | `cryptography` (Fernet) | AES-128-CBC + HMAC-SHA256; encrypts secrets at rest; key held in memory only |
+| Secret encryption | `cryptography` (Fernet) | AES-128-CBC + HMAC-SHA256; defense-in-depth layer for API keys/passwords in `app_settings` |
 | Charts | Plotly | Interactive browser charts; JSON specs generated server-side, rendered client-side |
 | Templates | Jinja2 | Server-side HTML rendering; auto-escapes output to prevent XSS |
 | PDF export | WeasyPrint | HTML-to-PDF conversion via CSS layout engine |
@@ -109,7 +111,7 @@ Browser → FastAPI Router
          └── notion_service.py   → Notion API
               │
               ▼
-         SQLite (encrypted secrets, plaintext financial data)
+         SQLite/SQLCipher (AES-256 encrypted database; field-encrypted secrets in app_settings)
          /data/ volume files (master.salt, master.verify, recovery_keys.json)
 ```
 
@@ -243,9 +245,17 @@ YNAB-Financial-Report/
 - Used codes must be permanently invalidated (mark `used: true`; never re-activate)
 - Recovery codes are shown to the user **exactly once** (at generation time). They are not stored in plaintext anywhere.
 
-### Secrets & Encryption
+### Database Encryption (SQLCipher)
 
-- All API keys and passwords (YNAB, AI provider, SMTP, Notion) are entered via Settings UI and stored encrypted in `app_settings` using Fernet with `app.state.master_key`.
+- The SQLite database (`/data/ynab_report.db`) is encrypted at the file level using **SQLCipher** (AES-256-CBC). The encryption key is derived from the user's master password.
+- The database is completely inaccessible without the master password. Opening it with a standard `sqlite3` tool returns "file is not a database."
+- `database.py` substitutes `sqlcipher3` for Python's `sqlite3` in `aiosqlite` and sets `PRAGMA key` on every new connection via a SQLAlchemy connection event.
+- **Lazy initialization:** `apply_migrations()` and `create_all()` run after unlock (not at startup), because the DB cannot be opened without the key. The three entry points are `POST /unlock`, `POST /first-run`, and `POST /recovery`.
+- **One-time migration:** On the first unlock after upgrading from a plaintext DB, the app detects the unencrypted file and converts it using SQLCipher's `sqlcipher_export`. This is automatic and transparent to the user.
+
+### Secrets & Encryption (Defense in Depth)
+
+- All API keys and passwords (YNAB, AI provider, SMTP, Notion) are entered via Settings UI and stored with an additional layer of field-level Fernet encryption in `app_settings`, on top of the whole-database SQLCipher encryption. This provides defense in depth.
 - `encryption.py` exposes exactly two public functions: `encrypt(plaintext: str) -> bytes` and `decrypt(ciphertext: bytes) -> str`. Both use `app.state.master_key` from `request.app.state`.
 - If `app.state.master_key is None` (app is locked), `encrypt()`/`decrypt()` must raise a clear error — never silently fail or return garbage.
 - Decrypted values must never be: logged, stored in session state, included in error messages, or returned in API responses.
@@ -334,6 +344,7 @@ Outlier exclusions must be stored in `report_snapshots.outliers_excluded` (JSON 
 | 10 — Tests + Hardening | Complete | pytest suite (unit + integration), TemplateResponse deprecation fix, full docs |
 | 11 — First-Run Bug Fixes | Complete | Docker build fixes, runtime issues, UX improvements found during first real deployment |
 | 12 — Life Context Chat | Complete | Replace profile wizard with AI-driven chat; user tells their financial life story; AI compresses to an encrypted context block injected into reports; versioned, updateable at any time |
+| 12.5 — Database Encryption | Planned | SQLCipher whole-database encryption (AES-256); one-time plaintext→encrypted migration; lazy DB init after unlock; Ollama vision capability detection for OCR |
 | 13 — External Data Import | Planned | Upload PDF/CSV financial documents; AI normalizes to transaction records or balance snapshots; user confirms before saving; included in AI report prompt; optional YNAB account association |
 | 14 — Dashboard Redesign | Deferred | Full dashboard redesign after Phase 12 + 13 data sources are in place; will include external accounts, net worth, richer dynamic charts |
 
