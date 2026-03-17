@@ -344,7 +344,7 @@ Outlier exclusions must be stored in `report_snapshots.outliers_excluded` (JSON 
 | 10 — Tests + Hardening | Complete | pytest suite (unit + integration), TemplateResponse deprecation fix, full docs |
 | 11 — First-Run Bug Fixes | Complete | Docker build fixes, runtime issues, UX improvements found during first real deployment |
 | 12 — Life Context Chat | Complete | Replace profile wizard with AI-driven chat; user tells their financial life story; AI compresses to an encrypted context block injected into reports; versioned, updateable at any time |
-| 12.5 — Database Encryption | Planned | SQLCipher whole-database encryption (AES-256); one-time plaintext→encrypted migration; lazy DB init after unlock; Ollama vision capability detection for OCR |
+| 12.5 — Database Encryption | Complete | SQLCipher whole-database encryption (AES-256); one-time plaintext→encrypted migration; lazy DB init after unlock |
 | 13 — External Data Import | Planned | Upload PDF/CSV financial documents; AI normalizes to transaction records or balance snapshots; user confirms before saving; included in AI report prompt; optional YNAB account association |
 | 14 — Dashboard Redesign | Deferred | Full dashboard redesign after Phase 12 + 13 data sources are in place; will include external accounts, net worth, richer dynamic charts |
 
@@ -417,6 +417,22 @@ These bugs and UX gaps were discovered during the first real end-to-end run of t
 ### Known Issues Still To Address
 
 None. All Phase 12 items are complete. Dashboard visual review is deferred to Phase 14 (intentional — see implementation status).
+
+---
+
+## Phase 12.5 — Database Encryption ✓ Complete
+
+### What Changed
+
+- **`app/database.py`** — Major rewrite. Monkey-patches `aiosqlite.core.sqlite3 = sqlcipher3` at module load. Adds `set_database_key(key)`, `migrate_plaintext_to_encrypted(key)`, and `_on_connect` SQLAlchemy event handler that issues `PRAGMA key` on every connection. `apply_migrations()` and `create_all()` remain exported but are no longer called at startup.
+- **`app/main.py`** — Lifespan stripped to `master_key = None` + `start_scheduler(app)`. No DB calls at startup (DB is inaccessible without the key).
+- **`app/routers/auth.py`** — All three auth entry points (`POST /first-run`, `POST /unlock`, `POST /recovery`) now call `set_database_key()` → `migrate_plaintext_to_encrypted()` → `apply_migrations()` → `create_all()` after deriving the master key. `post_unlock` also reschedules the APScheduler job once the DB is accessible.
+- **`requirements.txt`** — Added `sqlcipher3-binary>=0.5.0`.
+- **`tests/unit/test_database_sqlcipher.py`** — New. 10 unit tests covering key storage, idempotent event registration, migration path (sentinel skip, fresh install, already-encrypted detection, plaintext→encrypted with data integrity, failure re-raise), and `_on_connect` PRAGMA behavior.
+
+### Ollama Vision Detection
+
+Deferred to Phase 13. The `list_models()` return type change and `/api/show` capability detection will be implemented at the start of Phase 13 since that's when it's actually needed.
 
 ---
 
