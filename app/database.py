@@ -1,8 +1,19 @@
+import asyncio
+import logging
 from collections.abc import AsyncGenerator
+from pathlib import Path
 
-from sqlalchemy import text
+import aiosqlite.core
+import sqlcipher3  # type: ignore[import-untyped]
+from sqlalchemy import event, text
 from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker, create_async_engine
 from sqlalchemy.orm import DeclarativeBase
+
+# Monkey-patch aiosqlite to use sqlcipher3 instead of stdlib sqlite3.
+# Must happen before any engine or connection is created.
+aiosqlite.core.sqlite3 = sqlcipher3  # type: ignore[attr-defined]
+
+logger = logging.getLogger("app.database")
 
 DATABASE_URL = "sqlite+aiosqlite:////data/ynab_report.db"
 
@@ -17,6 +28,92 @@ AsyncSessionLocal = async_sessionmaker(
 
 class Base(DeclarativeBase):
     pass
+
+
+_db_key: bytes | None = None
+
+_SENTINEL_PATH = Path("/data/migration_complete")
+_DB_PATH = Path("/data/ynab_report.db")
+_DB_ENC_PATH = Path("/data/ynab_report_enc.db")
+
+
+def _on_connect(dbapi_connection: object, connection_record: object) -> None:
+    """SQLAlchemy connect event: send PRAGMA key on every new raw connection."""
+    if _db_key is None:
+        return
+    hex_key = _db_key.hex()
+    dbapi_connection.execute(f"PRAGMA key = \"x'{hex_key}'\"")  # type: ignore[union-attr]
+
+
+def set_database_key(key: bytes) -> None:
+    """Store the encryption key and register the PRAGMA key event on the engine."""
+    global _db_key  # noqa: PLW0603
+    _db_key = key
+
+    sync_engine = engine.sync_engine
+
+    # Remove existing listener if present, then re-add to avoid duplicates.
+    if event.contains(sync_engine, "connect", _on_connect):
+        event.remove(sync_engine, "connect", _on_connect)
+    event.listen(sync_engine, "connect", _on_connect)
+
+
+def _migrate_sync(key: bytes) -> None:
+    """Synchronous migration logic — intended to run via asyncio.to_thread."""
+    hex_key = key.hex()
+
+    # Check if DB is already encrypted by trying to open with the key.
+    try:
+        conn = sqlcipher3.connect(str(_DB_PATH))
+        conn.execute(f"PRAGMA key = \"x'{hex_key}'\"")
+        conn.execute("SELECT count(*) FROM sqlite_master")
+        conn.close()
+        logger.info("Database is already encrypted — skipping migration")
+        _SENTINEL_PATH.write_text("done")
+        return
+    except Exception:
+        pass  # DB is plaintext — proceed with migration
+
+    logger.info("Migrating plaintext database to SQLCipher encryption")
+
+    conn = sqlcipher3.connect(str(_DB_PATH))
+    try:
+        conn.execute(
+            f"ATTACH DATABASE '{_DB_ENC_PATH}' AS encrypted"
+            f" KEY \"x'{hex_key}'\""
+        )
+        conn.execute("SELECT sqlcipher_export('encrypted')")
+        conn.execute("DETACH DATABASE encrypted")
+    except Exception:
+        conn.close()
+        raise
+    conn.close()
+
+    _DB_ENC_PATH.replace(_DB_PATH)
+    _SENTINEL_PATH.write_text("done")
+    logger.info("Plaintext-to-encrypted migration completed successfully")
+
+
+async def migrate_plaintext_to_encrypted(key: bytes) -> None:
+    """
+    One-time migration: convert an existing plaintext SQLite DB to SQLCipher.
+
+    Idempotent — skips if the sentinel file exists, the DB is already encrypted,
+    or no DB file exists yet (fresh install).
+    """
+    if _SENTINEL_PATH.exists():
+        return
+
+    if not _DB_PATH.exists():
+        # Fresh install — create_all() will produce an encrypted DB.
+        _SENTINEL_PATH.write_text("done")
+        return
+
+    try:
+        await asyncio.to_thread(_migrate_sync, key)
+    except Exception:
+        logger.exception("Failed to migrate database to encrypted format")
+        raise
 
 
 async def apply_migrations() -> None:
