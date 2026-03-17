@@ -152,6 +152,7 @@ async def apply_migrations() -> None:
 async def create_all() -> None:
     """Create all database tables. Called during app lifespan startup."""
     import app.models.life_context  # noqa: F401 — registers LifeContextSession/Block with Base
+    import app.models.import_data   # noqa: F401 — registers InstitutionProfile/ImportSession/ExternalAccount/ExternalTransaction/ExternalBalance with Base
     async with engine.begin() as conn:
         await conn.run_sync(Base.metadata.create_all)
 
