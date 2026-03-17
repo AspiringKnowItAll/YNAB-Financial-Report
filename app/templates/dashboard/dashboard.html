@@ -259,10 +259,16 @@
         No sync has been run yet.
       {% endif %}
     </div>
-    <button type="button" id="sync-btn" class="btn btn--primary"
-            style="padding: 0.45rem 1rem; font-size: 0.85rem;">
-      Sync Now
-    </button>
+    <div style="display:flex;gap:0.5rem;align-items:center;">
+      <a href="/import" class="btn btn--primary"
+         style="padding: 0.45rem 1rem; font-size: 0.85rem; text-decoration: none;">
+        Import
+      </a>
+      <button type="button" id="sync-btn" class="btn btn--primary"
+              style="padding: 0.45rem 1rem; font-size: 0.85rem;">
+        Sync Now
+      </button>
+    </div>
   </div>
 
   {% if not has_data %}

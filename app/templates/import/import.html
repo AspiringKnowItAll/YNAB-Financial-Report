@@ -1,0 +1,345 @@
+{% extends "base.html" %}
+
+{% block title %}Import Financial Data{% endblock %}
+
+{% block extra_head %}
+<style>
+  .page-body {
+    max-width: 1100px;
+    margin: 0 auto;
+    padding: 1.5rem;
+  }
+
+  .page-header__title {
+    font-size: 1.3rem;
+    font-weight: 700;
+    color: var(--text);
+  }
+
+  .page-header__sub {
+    color: var(--muted);
+    font-size: 0.85rem;
+    margin-top: 0.25rem;
+  }
+
+  .page-header { margin-bottom: 1.5rem; }
+
+  /* Drop zone */
+  .drop-zone {
+    border: 2px dashed var(--border);
+    border-radius: var(--radius);
+    padding: 2.5rem 1.5rem;
+    text-align: center;
+    cursor: pointer;
+    transition: border-color 0.15s, background 0.15s;
+    margin-bottom: 1rem;
+  }
+
+  .drop-zone:hover,
+  .drop-zone--over {
+    border-color: var(--accent);
+    background: rgba(108,143,255,0.04);
+  }
+
+  .drop-zone__icon {
+    font-size: 2rem;
+    color: var(--muted);
+    margin-bottom: 0.5rem;
+  }
+
+  .drop-zone__text {
+    font-size: 0.95rem;
+    color: var(--text);
+  }
+
+  .drop-zone__sub {
+    font-size: 0.85rem;
+    color: var(--muted);
+    margin: 0.4rem 0;
+  }
+
+  .drop-zone__file-name {
+    font-size: 0.85rem;
+    color: var(--accent);
+    margin-top: 0.5rem;
+    word-break: break-all;
+  }
+
+  /* Profile selector */
+  .profile-selector {
+    margin-bottom: 1.25rem;
+    max-width: 400px;
+  }
+
+  .profile-selector label {
+    margin-bottom: 0.4rem;
+  }
+
+  /* Upload button area */
+  .upload-actions {
+    display: flex;
+    align-items: center;
+    gap: 1rem;
+    margin-top: 1rem;
+  }
+
+  /* Spinner */
+  .spinner {
+    display: none;
+    align-items: center;
+    gap: 0.5rem;
+    color: var(--muted);
+    font-size: 0.9rem;
+  }
+
+  .spinner--visible { display: flex; }
+
+  .spinner__dot {
+    width: 8px;
+    height: 8px;
+    background: var(--accent);
+    border-radius: 50%;
+    animation: pulse 1s ease-in-out infinite;
+  }
+
+  @keyframes pulse {
+    0%, 100% { opacity: 0.3; }
+    50% { opacity: 1; }
+  }
+
+  /* Summary card */
+  .summary-card {
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: var(--radius);
+    padding: 1.25rem;
+    margin-bottom: 1.25rem;
+  }
+
+  .summary-card__title {
+    font-weight: 700;
+    font-size: 1rem;
+    margin-bottom: 0.75rem;
+  }
+
+  .summary-card__row {
+    display: flex;
+    gap: 0.5rem;
+    margin-bottom: 0.35rem;
+    font-size: 0.9rem;
+  }
+
+  .summary-card__label {
+    color: var(--muted);
+    min-width: 120px;
+    flex-shrink: 0;
+  }
+
+  .summary-card__value {
+    color: var(--text);
+  }
+
+  .summary-card__questions {
+    margin-top: 0.75rem;
+    padding-top: 0.75rem;
+    border-top: 1px solid var(--border);
+  }
+
+  .summary-card__questions-title {
+    font-size: 0.85rem;
+    font-weight: 600;
+    color: var(--warning);
+    margin-bottom: 0.35rem;
+  }
+
+  .summary-card__questions ul {
+    list-style: disc;
+    padding-left: 1.25rem;
+    font-size: 0.85rem;
+    color: var(--muted);
+  }
+
+  /* Rows table */
+  .rows-table-wrap {
+    max-height: 450px;
+    overflow-y: auto;
+    border: 1px solid var(--border);
+    border-radius: var(--radius);
+    margin-bottom: 1.25rem;
+  }
+
+  .rows-table {
+    width: 100%;
+    border-collapse: collapse;
+    font-size: 0.85rem;
+  }
+
+  .rows-table th {
+    position: sticky;
+    top: 0;
+    background: var(--surface);
+    text-align: left;
+    font-size: 0.75rem;
+    font-weight: 700;
+    text-transform: uppercase;
+    letter-spacing: 0.05em;
+    color: var(--muted);
+    padding: 0.5rem 0.75rem;
+    border-bottom: 1px solid var(--border);
+  }
+
+  .rows-table th.right,
+  .rows-table td.right { text-align: right; }
+
+  .rows-table td {
+    padding: 0.5rem 0.75rem;
+    border-bottom: 1px solid rgba(46,49,71,0.5);
+    vertical-align: middle;
+  }
+
+  .rows-table tr:last-child td { border-bottom: none; }
+
+  .dup-exact { color: var(--danger); font-size: 0.8rem; font-weight: 600; }
+  .dup-near  { color: var(--warning); font-size: 0.8rem; font-weight: 600; }
+
+  /* Action buttons */
+  .action-buttons {
+    display: flex;
+    align-items: center;
+    gap: 0.75rem;
+    margin-top: 1rem;
+  }
+
+  .btn--neutral {
+    background: var(--border);
+    color: var(--text);
+  }
+
+  .btn--neutral:hover {
+    background: var(--muted);
+  }
+
+  /* Chat placeholder */
+  .chat-placeholder {
+    background: rgba(245,166,35,0.12);
+    border: 1px solid rgba(245,166,35,0.4);
+    color: #f7c96a;
+    border-radius: var(--radius);
+    padding: 0.75rem 1rem;
+    font-size: 0.9rem;
+    margin-bottom: 1.25rem;
+  }
+
+  /* Start over link */
+  .start-over {
+    font-size: 0.85rem;
+    margin-left: auto;
+  }
+</style>
+{% endblock %}
+
+{% block nav %}
+<nav class="navbar">
+  <span class="navbar__brand">YNAB Financial Report</span>
+  <div class="navbar__links">
+    <a href="/">Dashboard</a>
+    <a href="/reports">Reports</a>
+    <a href="/profile">My Financial Profile</a>
+    <a href="/settings">Settings</a>
+  </div>
+</nav>
+{% endblock %}
+
+{% block content %}
+<div class="page-body">
+
+  <div class="page-header">
+    <div class="page-header__title">Import Financial Data</div>
+    <div class="page-header__sub">Upload PDF or CSV statements from any institution</div>
+  </div>
+
+  <!-- ============================================================ -->
+  <!-- STATE 1: Upload                                               -->
+  <!-- ============================================================ -->
+  <div id="upload-state">
+
+    <div class="profile-selector">
+      <label for="institution-profile-select">Institution Profile</label>
+      <select id="institution-profile-select">
+        <option value="">No profile — let AI figure it out</option>
+        {% for p in institution_profiles %}
+        <option value="{{ p.id }}">{{ p.name }}</option>
+        {% endfor %}
+      </select>
+    </div>
+
+    <div id="drop-zone" class="drop-zone">
+      <div class="drop-zone__icon">&#11014;</div>
+      <div class="drop-zone__text">Drag &amp; drop a PDF or CSV here</div>
+      <div class="drop-zone__sub">or</div>
+      <button type="button" id="choose-file-btn" class="btn btn--primary"
+              style="padding:0.4rem 1rem;font-size:0.85rem;">
+        Choose File
+      </button>
+      <input type="file" id="file-input" accept=".pdf,.csv,.txt" style="display:none;">
+      <div id="file-name-display" class="drop-zone__file-name"></div>
+    </div>
+
+    <div class="upload-actions">
+      <button type="button" id="upload-btn" class="btn btn--primary" disabled>
+        Upload and Analyze
+      </button>
+      <div id="upload-spinner" class="spinner">
+        <span class="spinner__dot"></span> Analyzing with AI&hellip;
+      </div>
+    </div>
+
+    <div id="upload-error" class="alert alert--error" style="display:none;margin-top:1rem;"></div>
+  </div>
+
+  <!-- ============================================================ -->
+  <!-- STATE 2: Review                                               -->
+  <!-- ============================================================ -->
+  <div id="review-state" style="display:none;">
+
+    <div id="duplicate-warning" class="alert alert--warning" style="display:none;"></div>
+
+    <div id="vision-notice" class="alert alert--warning" style="display:none;">
+      This appears to be a scanned document. The AI analyzed it with limited text — results may be incomplete. You can describe corrections in the chat below.
+    </div>
+
+    <div id="summary-card" class="summary-card"></div>
+
+    <div id="rows-table-wrap" class="rows-table-wrap">
+      <table id="rows-table" class="rows-table">
+        <thead id="rows-thead"></thead>
+        <tbody id="rows-tbody"></tbody>
+      </table>
+    </div>
+
+    <div id="chat-placeholder" class="chat-placeholder">
+      &#128172; Chat with the AI to correct or clarify the extracted data. (Coming soon — available after Milestone 4.)
+    </div>
+
+    <div id="action-buttons" class="action-buttons">
+      <button type="button" id="cancel-btn" class="btn btn--neutral">Cancel Import</button>
+      <button type="button" id="confirm-btn" class="btn btn--primary" disabled
+              title="Coming soon — available after Milestone 5">
+        Confirm Import
+      </button>
+      <a href="#" id="start-over-btn" class="start-over">Start Over</a>
+    </div>
+  </div>
+
+  <!-- ============================================================ -->
+  <!-- STATE 3: Confirmed (placeholder)                              -->
+  <!-- ============================================================ -->
+  <div id="confirmed-state" style="display:none;">
+    <div class="alert alert--success">Import confirmed! Data has been saved.</div>
+    <a href="/">Back to Dashboard</a>
+  </div>
+
+</div>
+
+<script src="/static/js/import.js"></script>
+{% endblock %}

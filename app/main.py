@@ -44,7 +44,7 @@ app.mount("/static", StaticFiles(directory="app/static"), name="static")
 # Routers
 # ---------------------------------------------------------------------------
 
-from app.routers import auth, dashboard, settings, reports, api, export, life_context
+from app.routers import auth, dashboard, settings, reports, api, export, life_context, import_data
 
 app.include_router(auth.router)
 app.include_router(dashboard.router)
@@ -53,6 +53,7 @@ app.include_router(reports.router)
 app.include_router(api.router)
 app.include_router(export.router)
 app.include_router(life_context.router)
+app.include_router(import_data.router)
 
 
 # ---------------------------------------------------------------------------
