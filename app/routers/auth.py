@@ -9,12 +9,27 @@ GET  /recovery        → Render recovery code form
 POST /recovery        → Use recovery code, unlock, redirect to new-password flow
 """
 
-from fastapi import APIRouter, Depends, Form, Request
-from fastapi.responses import HTMLResponse, RedirectResponse
+import logging
+import os
 
+from fastapi import APIRouter, Form, Request
+from fastapi.responses import HTMLResponse, RedirectResponse
+from sqlalchemy import select
+
+from app.database import (
+    AsyncSessionLocal,
+    apply_migrations,
+    create_all,
+    migrate_plaintext_to_encrypted,
+    set_database_key,
+)
+from app.models.settings import AppSettings
+from app.scheduler import reschedule_job
 from app.schemas.auth import MasterPasswordCreate, MasterPasswordUnlock, RecoveryCodeSubmit
 from app.services import auth_service
 from app.templates_config import templates
+
+logger = logging.getLogger(__name__)
 
 router = APIRouter(tags=["auth"])
 
@@ -53,6 +68,11 @@ async def post_first_run(
 
     recovery_codes = await auth_service.setup_master_password(validated.password)
     request.app.state.master_key = await auth_service.unlock(validated.password)
+
+    # Initialize the encrypted database for the first time
+    set_database_key(request.app.state.master_key)
+    await create_all()
+    await apply_migrations()
 
     return templates.TemplateResponse(
         request,
@@ -100,6 +120,34 @@ async def post_unlock(
             status_code=401,
         )
 
+    # Open the encrypted database and run migrations
+    set_database_key(request.app.state.master_key)
+    try:
+        await migrate_plaintext_to_encrypted(request.app.state.master_key)
+    except Exception:
+        logger.exception("Database migration to encrypted format failed")
+        request.app.state.master_key = None
+        return templates.TemplateResponse(
+            request,
+            "auth/unlock.html",
+            {
+                "errors": [
+                    "Database migration failed. Your data may be intact but could "
+                    "not be converted to encrypted format. Please contact support."
+                ]
+            },
+            status_code=500,
+        )
+    await apply_migrations()
+    await create_all()
+
+    # Reschedule automated jobs now that the DB is accessible
+    async with AsyncSessionLocal() as db:
+        result = await db.execute(select(AppSettings).where(AppSettings.id == 1))
+        settings = result.scalar_one_or_none()
+    if settings and settings.schedule_enabled:
+        reschedule_job(settings, request.app)
+
     return RedirectResponse("/", status_code=302)
 
 
@@ -140,9 +188,29 @@ async def post_recovery(
             status_code=401,
         )
 
+    # Open the encrypted database and run migrations
+    set_database_key(request.app.state.master_key)
+    try:
+        await migrate_plaintext_to_encrypted(request.app.state.master_key)
+    except Exception:
+        logger.exception("Database migration to encrypted format failed during recovery")
+        request.app.state.master_key = None
+        return templates.TemplateResponse(
+            request,
+            "auth/recovery.html",
+            {
+                "errors": [
+                    "Database migration failed. Your data may be intact but could "
+                    "not be converted to encrypted format. Please contact support."
+                ]
+            },
+            status_code=500,
+        )
+    await apply_migrations()
+    await create_all()
+
     # Recovery succeeded — force new master password setup.
     # Clear the salt so is_setup_complete() returns False, triggering /first-run.
-    import os
     os.remove(auth_service.SALT_PATH)
     os.remove(auth_service.VERIFY_PATH)
     os.remove(auth_service.RECOVERY_PATH)
