@@ -1,0 +1,85 @@
+<div class="config-modal-overlay" id="config-modal-overlay" style="display:none;">
+  <div class="config-modal" role="dialog" aria-modal="true" aria-labelledby="config-modal-title">
+    <div class="config-modal__header">
+      <span id="config-modal-title">Configure Widget</span>
+      <button type="button" id="config-modal-close">&times;</button>
+    </div>
+    <div class="config-modal__body">
+      <input type="hidden" id="config-widget-id">
+
+      <!-- Title override -->
+      <div class="config-modal__section">
+        <label class="config-modal__label" for="config-title-override">Title Override</label>
+        <input type="text" id="config-title-override" placeholder="Leave blank to use default">
+      </div>
+
+      <!-- Time Period -->
+      <div class="config-modal__section">
+        <label class="config-modal__label" for="config-time-period">Time Period</label>
+        <select id="config-time-period">
+          <option value="">Dashboard Default</option>
+          <option value="last_month">Last Month</option>
+          <option value="last_3_months">Last 3 Months</option>
+          <option value="last_6_months">Last 6 Months</option>
+          <option value="ytd">Year to Date</option>
+          <option value="last_12_months">Last 12 Months</option>
+          <option value="last_18_months">Last 18 Months</option>
+          <option value="last_24_months">Last 24 Months</option>
+          <option value="all_time">All Time</option>
+          <option value="custom">Custom Date Range</option>
+        </select>
+      </div>
+
+      <!-- Custom date range (shown only when custom selected) -->
+      <div class="config-modal__section" id="config-custom-dates" style="display:none;">
+        <label class="config-modal__label" for="config-date-start">Start Date</label>
+        <input type="date" id="config-date-start">
+        <label class="config-modal__label" for="config-date-end" style="margin-top:0.5rem;">End Date</label>
+        <input type="date" id="config-date-end">
+      </div>
+
+      <!-- Included YNAB Accounts -->
+      <div class="config-modal__section">
+        <label class="config-modal__label">Included YNAB Accounts</label>
+        <p style="font-size:0.8rem;color:var(--muted);margin-bottom:0.4rem;">Leave all unchecked to include all accounts.</p>
+        <div class="multiselect-list" id="config-ynab-accounts">
+          <!-- Populated by JS from server-side JSON -->
+        </div>
+      </div>
+
+      <!-- Included External Accounts -->
+      <div class="config-modal__section">
+        <label class="config-modal__label">Included External Accounts</label>
+        <p style="font-size:0.8rem;color:var(--muted);margin-bottom:0.4rem;">Leave all unchecked to include all external accounts.</p>
+        <div class="multiselect-list" id="config-external-accounts">
+          <!-- Populated by JS -->
+        </div>
+      </div>
+
+      <!-- Excluded Categories -->
+      <div class="config-modal__section">
+        <label class="config-modal__label">Excluded Categories</label>
+        <p style="font-size:0.8rem;color:var(--muted);margin-bottom:0.4rem;">Check categories to exclude from this widget.</p>
+        <div class="multiselect-list" id="config-excluded-categories">
+          <!-- Populated by JS -->
+        </div>
+      </div>
+
+      <!-- Chart Type -->
+      <div class="config-modal__section">
+        <label class="config-modal__label" for="config-chart-type">Chart Type</label>
+        <select id="config-chart-type">
+          <option value="">Default</option>
+          <option value="bar">Bar</option>
+          <option value="line">Line</option>
+          <option value="donut">Donut</option>
+        </select>
+      </div>
+
+    </div>
+    <div class="config-modal__footer">
+      <button type="button" class="btn" id="config-modal-cancel">Cancel</button>
+      <button type="button" class="btn btn--primary" id="config-modal-save">Save Widget</button>
+    </div>
+  </div>
+</div>

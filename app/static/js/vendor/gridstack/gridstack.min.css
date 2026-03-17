@@ -1,0 +1,28 @@
+/**
+ * gridstack.js — CSS STUB for development
+ *
+ * Copyright (c) 2021-present Alain Dumesny, Dylan Weiss, Lyor Goldstein
+ * MIT License — https://github.com/gridstack/gridstack.js/blob/master/LICENSE
+ *
+ * This is a minimal CSS stub that defines the key gridstack class names.
+ * The real gridstack.min.css should be vendored here for production use.
+ */
+
+.grid-stack {
+  position: relative;
+}
+
+.grid-stack-item {
+  position: relative;
+}
+
+.grid-stack-item-content {
+  position: relative;
+  overflow: hidden;
+}
+
+.grid-stack-placeholder {
+  background: rgba(108, 143, 255, 0.08);
+  border: 2px dashed rgba(108, 143, 255, 0.3);
+  border-radius: 8px;
+}

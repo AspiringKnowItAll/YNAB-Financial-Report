@@ -1,0 +1,191 @@
+{% extends "base.html" %}
+
+{% block title %}Edit: {{ dashboard.name }} — YNAB Financial Report{% endblock %}
+
+{% block extra_head %}
+<link rel="stylesheet" href="/static/css/dashboard.css">
+<link rel="stylesheet" href="/static/js/vendor/gridstack/gridstack.min.css">
+{# SECURITY NOTE: intentionally unsanitized — single-user self-hosted app #}
+{% if dashboard.custom_css %}
+<style id="dashboard-custom-css">{{ dashboard.custom_css | safe }}</style>
+{% endif %}
+{% endblock %}
+
+{% block nav %}
+<nav class="navbar">
+  <span class="navbar__brand">YNAB Financial Report</span>
+  <div class="navbar__links">
+    <a href="/" style="color: var(--text);">Dashboard</a>
+    <a href="/reports">Reports</a>
+    <a href="/profile">My Financial Profile</a>
+    <a href="/settings">Settings</a>
+  </div>
+</nav>
+{% endblock %}
+
+{% block content %}
+<div class="dash-layout">
+
+  {# ── Dock toggle (narrow viewports) ─────────────────────── #}
+  <button type="button" class="dock-toggle" id="dock-toggle" aria-label="Toggle dashboard sidebar">
+    <svg width="20" height="20" viewBox="0 0 20 20" fill="currentColor">
+      <rect y="3" width="20" height="2" rx="1"/>
+      <rect y="9" width="20" height="2" rx="1"/>
+      <rect y="15" width="20" height="2" rx="1"/>
+    </svg>
+  </button>
+
+  {# ── Left dock ──────────────────────────────────────────── #}
+  <aside class="dash-dock" id="dash-dock">
+    <div class="dash-dock__header">Dashboards</div>
+    <ul class="dash-dock__list">
+      {% for d in all_dashboards %}
+      <li>
+        <a href="/dashboards/{{ d.id }}"
+           class="dash-dock__item{% if d.id == dashboard.id %} dash-dock__item--active{% endif %}">
+          {{ d.name }}
+          {% if d.is_default %}
+          <span class="dash-dock__badge">Default</span>
+          {% endif %}
+        </a>
+      </li>
+      {% endfor %}
+    </ul>
+    <div class="dash-dock__footer">
+      <a href="/dashboards/new" class="dash-dock__item">+ New Dashboard</a>
+      <a href="/dashboards" class="dash-dock__item" style="font-size: 0.8rem; color: var(--muted);">All Dashboards</a>
+    </div>
+  </aside>
+
+  {# ── Main content ───────────────────────────────────────── #}
+  <main class="dash-main edit-mode">
+    <div class="dash-main__header">
+      <div>
+        <h1 class="dash-main__title">Edit: {{ dashboard.name }}</h1>
+        {% if dashboard.description %}
+        <p class="dash-main__desc">{{ dashboard.description }}</p>
+        {% endif %}
+      </div>
+      <div style="display: flex; gap: 0.5rem;">
+        <a href="/dashboards/{{ dashboard.id }}" class="btn" style="padding: 0.4rem 0.85rem; font-size: 0.82rem;">View Dashboard</a>
+        <a href="/dashboards/{{ dashboard.id }}" class="btn btn--primary" style="padding: 0.4rem 0.85rem; font-size: 0.82rem;">Done Editing</a>
+      </div>
+    </div>
+
+    {# ── Status bar for save confirmations / errors ────── #}
+    <div id="builder-status" style="display:none; margin-bottom:1rem; padding:0.5rem 0.85rem; border-radius:var(--radius); font-size:0.85rem;"></div>
+
+    <div class="builder-content">
+      {# ── Widget grid area (left) ─────────────────────── #}
+      <div class="builder-grid-area">
+        <div class="widget-grid" id="widget-grid" data-columns="{{ dashboard.grid_columns }}">
+          {% for widget in widgets %}
+          <div class="grid-stack-item widget-card widget-card--edit"
+               data-widget-id="{{ widget.id }}"
+               data-widget-type="{{ widget.widget_type }}"
+               data-config-json="{{ widget.config_json | e }}"
+               gs-x="{{ widget.grid_x }}"
+               gs-y="{{ widget.grid_y }}"
+               gs-w="{{ widget.grid_w }}"
+               gs-h="{{ widget.grid_h }}">
+            <div class="grid-stack-item-content">
+              <div class="widget-drag-handle"></div>
+              <div class="widget-header">
+                <span class="widget-header__title">{{ widget.widget_type | replace('_', ' ') | title }}</span>
+                <div style="display:flex;gap:0.25rem;">
+                  <button type="button" class="widget-config-btn" data-widget-id="{{ widget.id }}" title="Configure Widget">&#9881;</button>
+                  <button type="button" class="widget-remove-btn" data-widget-id="{{ widget.id }}" title="Remove Widget">&times;</button>
+                </div>
+              </div>
+              <div class="widget-body widget-body__placeholder">
+                {{ widget.widget_type | replace('_', ' ') | title }}
+              </div>
+            </div>
+          </div>
+          {% endfor %}
+        </div>
+
+        {% if not widgets %}
+        <div class="card" id="empty-grid-message" style="text-align: center; padding: 3rem; margin-top: 1rem;">
+          <p style="font-size: 1.1rem; font-weight: 600; margin-bottom: 0.5rem;">No widgets yet</p>
+          <p style="color: var(--muted); font-size: 0.9rem;">
+            Use the widget picker on the right to add widgets to your dashboard.
+          </p>
+        </div>
+        {% endif %}
+      </div>
+
+      {# ── Builder sidebar (right) ─────────────────────── #}
+      <aside class="builder-sidebar">
+
+        {# Section 1: Dashboard Settings #}
+        <div class="builder-sidebar__section">
+          <h3 class="builder-sidebar__heading">Dashboard Settings</h3>
+
+          <label class="builder-sidebar__label" for="settings-name">Name</label>
+          <input type="text" id="settings-name" value="{{ dashboard.name }}">
+
+          <label class="builder-sidebar__label" for="settings-description" style="margin-top:0.75rem;">Description</label>
+          <textarea id="settings-description" rows="2">{{ dashboard.description or '' }}</textarea>
+
+          <label class="builder-sidebar__label" for="settings-grid-columns" style="margin-top:0.75rem;">Grid Columns</label>
+          <select id="settings-grid-columns">
+            <option value="6"{% if dashboard.grid_columns == 6 %} selected{% endif %}>6</option>
+            <option value="8"{% if dashboard.grid_columns == 8 %} selected{% endif %}>8</option>
+            <option value="12"{% if dashboard.grid_columns == 12 %} selected{% endif %}>12</option>
+            <option value="16"{% if dashboard.grid_columns == 16 %} selected{% endif %}>16</option>
+            <option value="24"{% if dashboard.grid_columns == 24 %} selected{% endif %}>24</option>
+          </select>
+
+          <label class="builder-sidebar__label" for="settings-time-period" style="margin-top:0.75rem;">Default Time Period</label>
+          <select id="settings-time-period">
+            <option value=""{% if not dashboard.default_time_period %} selected{% endif %}>Dashboard Default</option>
+            <option value="last_month"{% if dashboard.default_time_period == 'last_month' %} selected{% endif %}>Last Month</option>
+            <option value="last_3_months"{% if dashboard.default_time_period == 'last_3_months' %} selected{% endif %}>Last 3 Months</option>
+            <option value="last_6_months"{% if dashboard.default_time_period == 'last_6_months' %} selected{% endif %}>Last 6 Months</option>
+            <option value="ytd"{% if dashboard.default_time_period == 'ytd' %} selected{% endif %}>Year to Date</option>
+            <option value="last_12_months"{% if dashboard.default_time_period == 'last_12_months' %} selected{% endif %}>Last 12 Months</option>
+            <option value="last_18_months"{% if dashboard.default_time_period == 'last_18_months' %} selected{% endif %}>Last 18 Months</option>
+            <option value="last_24_months"{% if dashboard.default_time_period == 'last_24_months' %} selected{% endif %}>Last 24 Months</option>
+            <option value="all_time"{% if dashboard.default_time_period == 'all_time' %} selected{% endif %}>All Time</option>
+          </select>
+
+          <label class="builder-sidebar__label" for="settings-custom-css" style="margin-top:0.75rem;">Custom CSS</label>
+          <textarea id="settings-custom-css" rows="4" style="font-family:monospace;font-size:0.8rem;">{{ dashboard.custom_css or '' }}</textarea>
+          <button type="button" class="btn preview-toggle" id="preview-css-btn" style="margin-top:0.4rem; padding:0.3rem 0.7rem; font-size:0.78rem;">Preview On</button>
+
+          <button type="button" class="btn btn--primary" id="save-settings-btn" style="margin-top:0.75rem; width:100%;">Save Settings</button>
+        </div>
+
+        {# Section 2: Add Widget #}
+        <div class="builder-sidebar__section">
+          <h3 class="builder-sidebar__heading">Add Widget</h3>
+          {% include "dashboards/partials/widget_picker.html" %}
+        </div>
+
+      </aside>
+    </div>
+  </main>
+
+</div>
+
+{# ── JSON data for JS ─────────────────────────────────────── #}
+<script id="dashboard-meta" type="application/json">
+{"id": {{ dashboard.id }}, "grid_columns": {{ dashboard.grid_columns }}}
+</script>
+<script id="ynab-accounts-data" type="application/json">
+{{ ynab_accounts_json | safe }}
+</script>
+<script id="external-accounts-data" type="application/json">
+{{ external_accounts_json | safe }}
+</script>
+<script id="categories-data" type="application/json">
+{{ categories_json | safe }}
+</script>
+
+{# ── Config modal partial ─────────────────────────────────── #}
+{% include "dashboards/partials/widget_config_modal.html" %}
+
+<script src="/static/js/vendor/gridstack/gridstack.all.js"></script>
+<script src="/static/js/dashboard_builder.js"></script>
+{% endblock %}

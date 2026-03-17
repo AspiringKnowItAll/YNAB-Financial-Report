@@ -1,11 +1,12 @@
 """
 Dashboard HTML routes — Phase 14.
 
-Serves the dashboard list, view, and creation pages.  The left dock
+Serves the dashboard list, view, creation, and edit pages.  The left dock
 (all-dashboards sidebar) is populated on every dashboard page by passing
 ``all_dashboards`` in the template context.
 """
 
+import json
 import logging
 
 from fastapi import APIRouter, Depends, HTTPException, Request
@@ -14,7 +15,10 @@ from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.database import get_db
+from app.models.account import Account
+from app.models.budget import Category, CategoryGroup
 from app.models.dashboard import Dashboard, DashboardWidget
+from app.models.import_data import ExternalAccount
 from app.models.settings import AppSettings
 from app.services.encryption import decrypt
 from app.templates_config import templates
@@ -102,6 +106,86 @@ async def dashboard_new(request: Request, db: AsyncSession = Depends(get_db)):
     return templates.TemplateResponse(request, "dashboards/dashboard_new.html", {
         "all_dashboards": all_dashboards,
         "global_custom_css": global_custom_css,
+    })
+
+
+@router.get("/dashboards/{dashboard_id}/edit", response_class=HTMLResponse)
+async def dashboard_edit(
+    request: Request,
+    dashboard_id: int,
+    db: AsyncSession = Depends(get_db),
+):
+    """Render the dashboard builder (edit mode)."""
+    # Fetch the requested dashboard
+    result = await db.execute(
+        select(Dashboard).where(Dashboard.id == dashboard_id)
+    )
+    dashboard = result.scalar_one_or_none()
+    if dashboard is None:
+        raise HTTPException(status_code=404, detail="Dashboard not found")
+
+    # Fetch widgets for this dashboard, ordered by position
+    result = await db.execute(
+        select(DashboardWidget)
+        .where(DashboardWidget.dashboard_id == dashboard_id)
+        .order_by(DashboardWidget.grid_y, DashboardWidget.grid_x)
+    )
+    widgets = list(result.scalars().all())
+
+    # Fetch YNAB accounts (not deleted, not closed)
+    result = await db.execute(
+        select(Account)
+        .where(Account.deleted.is_(False), Account.closed.is_(False))
+        .order_by(Account.name)
+    )
+    ynab_accounts = list(result.scalars().all())
+
+    # Fetch categories with group name
+    result = await db.execute(
+        select(Category, CategoryGroup.name)
+        .join(CategoryGroup, Category.group_id == CategoryGroup.id)
+        .where(
+            Category.deleted.is_(False),
+            Category.hidden.is_(False),
+            CategoryGroup.deleted.is_(False),
+            CategoryGroup.hidden.is_(False),
+        )
+        .order_by(CategoryGroup.name, Category.name)
+    )
+    categories_with_group = [
+        {"id": cat.id, "name": cat.name, "group_name": group_name,
+         "display_name": f"{group_name}: {cat.name}"}
+        for cat, group_name in result.all()
+    ]
+
+    # Fetch active external accounts
+    result = await db.execute(
+        select(ExternalAccount)
+        .where(ExternalAccount.is_active.is_(True))
+        .order_by(ExternalAccount.name)
+    )
+    external_accounts = list(result.scalars().all())
+
+    all_dashboards = await _get_all_dashboards(db)
+    global_custom_css = await _get_global_custom_css(db, request.app.state.master_key)
+
+    # Serialize account/category data to JSON for JS consumption
+    ynab_accounts_json = json.dumps([
+        {"id": a.id, "name": a.name} for a in ynab_accounts
+    ])
+    external_accounts_json = json.dumps([
+        {"id": a.id, "name": a.name} for a in external_accounts
+    ])
+    categories_json = json.dumps(categories_with_group)
+
+    return templates.TemplateResponse(request, "dashboards/dashboard_edit.html", {
+        "dashboard": dashboard,
+        "widgets": widgets,
+        "all_dashboards": all_dashboards,
+        "global_custom_css": global_custom_css,
+        "ynab_accounts_json": ynab_accounts_json,
+        "external_accounts_json": external_accounts_json,
+        "categories_json": categories_json,
     })
 
 

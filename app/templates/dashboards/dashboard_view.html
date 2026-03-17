@@ -69,9 +69,9 @@
         {% endif %}
       </div>
       <div style="display: flex; gap: 0.5rem;">
-        <button type="button" class="btn" style="padding: 0.4rem 0.85rem; font-size: 0.82rem; background: var(--border); color: var(--muted); cursor: not-allowed;" disabled>
+        <a href="/dashboards/{{ dashboard.id }}/edit" class="btn" style="padding: 0.4rem 0.85rem; font-size: 0.82rem;">
           Edit Dashboard
-        </button>
+        </a>
       </div>
     </div>
 
@@ -101,7 +101,7 @@
     <div class="card" style="text-align: center; padding: 3rem; margin-top: 1rem;">
       <p style="font-size: 1.1rem; font-weight: 600; margin-bottom: 0.5rem;">No widgets on this dashboard</p>
       <p style="color: var(--muted); font-size: 0.9rem;">
-        Widgets will be added in edit mode (coming in Milestone 2).
+        <a href="/dashboards/{{ dashboard.id }}/edit">Edit this dashboard</a> to add widgets.
       </p>
     </div>
     {% endif %}
