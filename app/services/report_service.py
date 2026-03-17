@@ -6,6 +6,7 @@ calls the AI provider for commentary, and persists a ReportSnapshot.
 """
 
 import json
+import logging
 from collections import defaultdict
 from datetime import datetime, timezone
 
@@ -22,6 +23,8 @@ from app.models.transaction import Transaction
 from app.services import analysis_service
 from app.services.ai_service import get_ai_provider
 from app.services.encryption import decrypt
+
+logger = logging.getLogger("app.services.report_service")
 
 
 # ---------------------------------------------------------------------------
@@ -511,10 +514,7 @@ async def generate_report(
             ext_accounts, latest_balances, ext_transactions, month
         )
     except Exception:
-        import logging as _logging
-        _logging.getLogger("app.services.report_service").exception(
-            "Failed to load external data for report"
-        )
+        logger.exception("Failed to load external data for report")
 
     # ── AI commentary ─────────────────────────────────────────────────────
     ai_commentary: str | None = None
@@ -537,8 +537,9 @@ async def generate_report(
                 max_tokens=1024,
             )
         except Exception as exc:
-            # Store error note but don't fail the whole report
-            ai_commentary = f"*AI commentary unavailable: {exc}*"
+            logger.error("AI commentary generation failed: %s", exc, exc_info=True)
+            # Store generic message — do not persist exception text
+            ai_commentary = "AI commentary unavailable."
 
     # ── Chart JSON ────────────────────────────────────────────────────────
     chart_data = json.dumps({

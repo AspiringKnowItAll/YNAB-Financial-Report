@@ -195,7 +195,7 @@ async def render_pdf(snapshot: ReportSnapshot, budget_name: str) -> bytes:
 
     from weasyprint import HTML  # noqa: PLC0415 — deferred to avoid import cost at startup
 
-    loop = asyncio.get_event_loop()
+    loop = asyncio.get_running_loop()
     pdf_bytes: bytes = await loop.run_in_executor(
         None, lambda: HTML(string=html_string).write_pdf()
     )

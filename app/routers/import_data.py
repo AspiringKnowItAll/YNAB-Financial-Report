@@ -286,7 +286,7 @@ async def import_chat(
             yield "data: [DONE]\n\n"
         except Exception as exc:
             logger.error("Import chat stream error: %s", exc, exc_info=True)
-            yield f"data: [ERROR] {exc}\n\n"
+            yield "data: [ERROR] An internal error occurred. Check server logs.\n\n"
 
     return StreamingResponse(
         event_generator(),

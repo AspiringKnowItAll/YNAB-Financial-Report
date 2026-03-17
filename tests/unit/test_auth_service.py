@@ -133,10 +133,9 @@ async def test_unlock_wrong_password_raises(data_dir):
         await unlock("wrong-password")
 
 
-def test_unlock_missing_salt_raises(data_dir):
+async def test_unlock_missing_salt_raises(data_dir):
     with pytest.raises(FileNotFoundError):
-        import asyncio
-        asyncio.get_event_loop().run_until_complete(unlock("any-password"))
+        await unlock("any-password")
 
 
 # ---------------------------------------------------------------------------

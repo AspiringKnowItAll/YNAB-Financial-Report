@@ -18,6 +18,7 @@ import json
 import os
 import secrets
 import string
+import threading
 
 from argon2.low_level import Type, hash_secret_raw
 from cryptography.fernet import Fernet, InvalidToken
@@ -43,6 +44,9 @@ RECOVERY_CODE_GROUPS = 4
 
 # Known plaintext encrypted into master.verify for password verification
 _VERIFY_PLAINTEXT = b"ynab-financial-report-verify-v1"
+
+# Lock to prevent TOCTOU race in use_recovery_code()
+_recovery_lock = threading.Lock()
 
 
 # ---------------------------------------------------------------------------
@@ -110,8 +114,10 @@ def _read_recovery_slots() -> list[dict]:
 
 
 def _write_recovery_slots(slots: list[dict]) -> None:
-    with open(RECOVERY_PATH, "w") as fh:
+    tmp_path = RECOVERY_PATH + ".tmp"
+    with open(tmp_path, "w") as fh:
         json.dump(slots, fh, indent=2)
+    os.replace(tmp_path, RECOVERY_PATH)
 
 
 # ---------------------------------------------------------------------------
@@ -202,20 +208,21 @@ async def use_recovery_code(code: str) -> bytes:
     Raises:
         ValueError: If the code is invalid or has already been used.
     """
-    slots = _read_recovery_slots()
+    with _recovery_lock:
+        slots = _read_recovery_slots()
 
-    for i, slot in enumerate(slots):
-        if slot["used"]:
-            continue
-        try:
-            master_key = _unwrap_master_key(slot, code)
-        except ValueError:
-            continue
+        for i, slot in enumerate(slots):
+            if slot["used"]:
+                continue
+            try:
+                master_key = _unwrap_master_key(slot, code)
+            except ValueError:
+                continue
 
-        # Valid code found — mark it used immediately
-        slots[i]["used"] = True
-        _write_recovery_slots(slots)
-        return master_key
+            # Valid code found — mark it used immediately
+            slots[i]["used"] = True
+            _write_recovery_slots(slots)
+            return master_key
 
     raise ValueError("Recovery code is invalid or has already been used.")
 

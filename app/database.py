@@ -1,5 +1,6 @@
 import asyncio
 import logging
+import os
 from collections.abc import AsyncGenerator
 from pathlib import Path
 
@@ -14,9 +15,16 @@ try:
     # Must happen before any engine or connection is created.
     aiosqlite.core.sqlite3 = sqlcipher3  # type: ignore[attr-defined]
 except ImportError:
-    # Fallback for environments without SQLCipher (e.g. running tests on the
-    # host without Docker).  The database will not be encrypted in this mode;
-    # production always runs inside Docker where sqlcipher3-binary is installed.
+    # In test environments, ALLOW_PLAINTEXT_DB=1 permits falling back to stdlib
+    # sqlite3 so tests can run without the native SQLCipher library.
+    # In all other environments this is a fatal error — the database must be
+    # encrypted.
+    if os.environ.get("ALLOW_PLAINTEXT_DB") != "1":
+        raise RuntimeError(
+            "sqlcipher3-binary is not installed and ALLOW_PLAINTEXT_DB is not set. "
+            "The database cannot be opened without encryption. "
+            "Install sqlcipher3-binary or set ALLOW_PLAINTEXT_DB=1 for test environments only."
+        ) from None
     import sqlite3 as sqlcipher3  # type: ignore[assignment]
 
 logger = logging.getLogger("app.database")

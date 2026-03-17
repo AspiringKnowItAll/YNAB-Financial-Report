@@ -152,12 +152,12 @@ async def post_settings(
     if smtp_host.strip() or email_enabled:
         try:
             smtp = SmtpSettingsUpdate(
-                email_enabled=bool(email_enabled),
+                email_enabled=(email_enabled == "1"),
                 smtp_host=smtp_host,
                 smtp_port=int(smtp_port) if smtp_port.strip() else 587,
                 smtp_username=smtp_username,
                 smtp_password=smtp_password or None,
-                smtp_use_tls=bool(smtp_use_tls),
+                smtp_use_tls=(smtp_use_tls == "1"),
                 smtp_from_email=smtp_from_email,
                 report_to_email=report_to_email,
             )
@@ -177,7 +177,7 @@ async def post_settings(
     if notion_token.strip() or notion_database_id.strip() or notion_enabled:
         try:
             notion = NotionSettingsUpdate(
-                notion_enabled=bool(notion_enabled),
+                notion_enabled=(notion_enabled == "1"),
                 notion_token=notion_token or None,
                 notion_database_id=notion_database_id or None,
             )
@@ -191,13 +191,13 @@ async def post_settings(
     # --- Scheduler ---
     try:
         sched = ScheduleSettingsUpdate(
-            schedule_enabled=bool(schedule_enabled),
+            schedule_enabled=(schedule_enabled == "1"),
             schedule_frequency=schedule_frequency or None,
             schedule_day_of_month=int(schedule_day_of_month) if schedule_day_of_month.strip() else None,
             schedule_day_of_week=schedule_day_of_week or None,
             schedule_month=int(schedule_month) if schedule_month.strip() else None,
             schedule_report_target=schedule_report_target or "previous_month",
-            schedule_send_email=bool(schedule_send_email),
+            schedule_send_email=(schedule_send_email == "1"),
         )
         settings.schedule_enabled = sched.schedule_enabled
         settings.schedule_frequency = sched.schedule_frequency

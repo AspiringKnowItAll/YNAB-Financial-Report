@@ -346,7 +346,7 @@ Outlier exclusions must be stored in `report_snapshots.outliers_excluded` (JSON 
 | 12 — Life Context Chat | Complete | Replace profile wizard with AI-driven chat; user tells their financial life story; AI compresses to an encrypted context block injected into reports; versioned, updateable at any time |
 | 12.5 — Database Encryption | Complete | SQLCipher whole-database encryption (AES-256); one-time plaintext→encrypted migration; lazy DB init after unlock |
 | 13 — External Data Import | Complete | Upload PDF/CSV financial documents; AI normalizes to transaction records or balance snapshots; user reviews + corrects via chat; confirms before saving; external accounts and transactions included in AI report prompt |
-| 13.5 — Security Hardening | Planned (before Phase 14) | Address all critical/high/medium findings from the 2026-03-17 three-reviewer code audit. Includes one architectural fix (vision AIProvider abstraction) that must precede Phase 14. Full scope in Phase 13.5 section below. |
+| 13.5 — Security Hardening | Complete | All critical/high/medium findings from the 2026-03-17 code audit addressed: vision AIProvider abstraction, TOCTOU lock, Pydantic row validation, get_running_loop fix, SSE error redaction, month validation, non-root Docker user, SQLCipher fail-fast, atomic recovery key write, boolean form parsing. |
 | 14 — Dashboard Redesign | Deferred | Full dashboard redesign after Phase 12 + 13 data sources are in place; will include external accounts, net worth, richer dynamic charts |
 
 ---
@@ -507,7 +507,7 @@ See the Phase 13 section above for a full list of changed files.
 
 ---
 
-### Phase 13.5 — Security Hardening (Planned — must complete before Phase 14)
+### Phase 13.5 — Security Hardening (Complete)
 
 **Goal:** Address all critical, high, and medium findings from the 2026-03-17 code audit (`code-review-summary.md`). One item is an **architectural fix** (vision AIProvider abstraction) that must be resolved before Phase 14 to prevent the violation from propagating into new AI-facing features.
 

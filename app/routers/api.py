@@ -13,6 +13,8 @@ POST /api/test/smtp/send         → Test SMTP by sending a real email to report
 Phases 3–8.
 """
 
+import logging
+
 import httpx
 from fastapi import APIRouter, Depends, Request
 from fastapi.responses import JSONResponse
@@ -26,6 +28,7 @@ from app.services.sync_service import run_sync
 from app.services.ynab_client import YnabClient
 
 router = APIRouter(prefix="/api", tags=["api"])
+logger = logging.getLogger("app.routers.api")
 
 
 # ---------------------------------------------------------------------------
@@ -92,7 +95,7 @@ async def trigger_report(
 
     Returns JSON with status and report_id on success.
     """
-    from datetime import date
+    from datetime import date, datetime
 
     settings = await _get_settings(db)
     if not settings or not settings.ynab_budget_id:
@@ -103,11 +106,12 @@ async def trigger_report(
 
     # Determine target month
     if month:
-        # Basic YYYY-MM validation
-        parts = month.split("-")
-        if len(parts) != 2 or not parts[0].isdigit() or not parts[1].isdigit():
+        # Strict YYYY-MM validation: rejects invalid months like 2025-99 or 99999-01
+        try:
+            datetime.strptime(month, "%Y-%m")
+        except ValueError:
             return JSONResponse(
-                {"status": "error", "message": "month must be in YYYY-MM format."},
+                {"status": "error", "message": "month must be in YYYY-MM format with a valid month (01–12)."},
                 status_code=400,
             )
     else:
@@ -134,8 +138,9 @@ async def trigger_report(
     except ValueError as exc:
         return JSONResponse({"status": "error", "message": str(exc)}, status_code=400)
     except Exception as exc:
+        logger.error("Report generation failed: %s", exc, exc_info=True)
         return JSONResponse(
-            {"status": "error", "message": f"Report generation failed: {exc}"},
+            {"status": "error", "message": "Report generation failed. Check server logs."},
             status_code=500,
         )
 
@@ -242,8 +247,9 @@ async def test_ai(request: Request, db: AsyncSession = Depends(get_db)):
             "models": models,
         })
     except Exception as exc:
+        logger.error("AI provider test failed: %s", exc, exc_info=True)
         return JSONResponse(
-            {"status": "error", "message": f"AI provider test failed: {exc}"},
+            {"status": "error", "message": "AI provider test failed. Check server logs."},
             status_code=502,
         )
 
@@ -313,8 +319,9 @@ async def test_smtp(request: Request, db: AsyncSession = Depends(get_db)):
             "message": f"Connected to {smtp_host}:{smtp_port} successfully.",
         })
     except Exception as exc:
+        logger.error("SMTP connection test failed: %s", exc, exc_info=True)
         return JSONResponse(
-            {"status": "error", "message": f"SMTP connection failed: {exc}"},
+            {"status": "error", "message": "SMTP connection failed. Check server logs."},
             status_code=502,
         )
 
@@ -403,8 +410,9 @@ async def test_smtp_send(request: Request, db: AsyncSession = Depends(get_db)):
             "message": f"Test email sent to {', '.join(recipients)}.",
         })
     except Exception as exc:
+        logger.error("SMTP test send failed: %s", exc, exc_info=True)
         return JSONResponse(
-            {"status": "error", "message": f"SMTP send failed: {exc}"},
+            {"status": "error", "message": "SMTP send failed. Check server logs."},
             status_code=502,
         )
 
@@ -476,7 +484,8 @@ async def email_report(
     except RuntimeError as exc:
         return JSONResponse({"status": "error", "message": str(exc)}, status_code=400)
     except Exception as exc:
+        logger.error("Email delivery failed: %s", exc, exc_info=True)
         return JSONResponse(
-            {"status": "error", "message": f"Email delivery failed: {exc}"},
+            {"status": "error", "message": "Email delivery failed. Check server logs."},
             status_code=502,
         )

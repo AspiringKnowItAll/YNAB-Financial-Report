@@ -7,6 +7,7 @@ POST /api/chat/message         → Accept {session_id, content} → stream SSE r
 POST /api/chat/end             → Accept {session_id} → compress → {ok: true}
 """
 
+import logging
 from collections.abc import AsyncIterator
 
 from fastapi import APIRouter, Depends, HTTPException, Request
@@ -22,6 +23,7 @@ from app.services import life_context_service as lcs
 from app.templates_config import templates
 
 router = APIRouter(tags=["life_context"])
+logger = logging.getLogger("app.routers.life_context")
 
 
 # ---------------------------------------------------------------------------
@@ -149,7 +151,8 @@ async def send_message(
                 yield f"data: {safe_chunk}\n\n"
             yield "data: [DONE]\n\n"
         except Exception as exc:
-            yield f"data: [ERROR] {exc}\n\n"
+            logger.error("Chat stream error: %s", exc, exc_info=True)
+            yield "data: [ERROR] An internal error occurred. Check server logs.\n\n"
 
     return StreamingResponse(
         event_generator(),
@@ -195,7 +198,8 @@ async def stream_opener(
                 yield f"data: {safe_chunk}\n\n"
             yield "data: [DONE]\n\n"
         except Exception as exc:
-            yield f"data: [ERROR] {exc}\n\n"
+            logger.error("Chat opener stream error: %s", exc, exc_info=True)
+            yield "data: [ERROR] An internal error occurred. Check server logs.\n\n"
 
     return StreamingResponse(
         event_generator(),

@@ -9,8 +9,16 @@ Supported providers:
   "openai"      → OpenAI SDK (gpt-4o, etc.)
   "openrouter"  → OpenAI-compatible (ai_base_url = https://openrouter.ai/api/v1)
   "ollama"      → OpenAI-compatible (ai_base_url = http://localhost:11434/v1)
+
+Protocol methods:
+  generate(system, user, max_tokens)   → batch completion (reports)
+  stream(system, user, max_tokens)     → SSE streaming (Life Context Chat)
+  health_check()                       → reachability probe
+  list_models()                        → available model IDs
+  vision(image_bytes, prompt)          → single-image OCR/vision (import_service)
 """
 
+import base64
 from collections.abc import AsyncIterator
 from typing import Protocol
 
@@ -37,6 +45,10 @@ class AIProvider(Protocol):
 
     async def stream(self, system: str, user: str, max_tokens: int) -> AsyncIterator[str]:
         """Stream a completion token-by-token. Yields text chunks as they arrive."""
+        ...
+
+    async def vision(self, image_bytes: bytes, prompt: str) -> str:
+        """Send a single image with a text prompt and return the response text."""
         ...
 
 
@@ -92,6 +104,33 @@ class AnthropicProvider:
         ) as stream_ctx:
             async for text in stream_ctx.text_stream:
                 yield text
+
+    async def vision(self, image_bytes: bytes, prompt: str) -> str:
+        """Send a single image with a text prompt and return the response text."""
+        from anthropic import AsyncAnthropic
+        client = AsyncAnthropic(api_key=self._api_key)
+        b64 = base64.b64encode(image_bytes).decode("ascii")
+        response = await client.messages.create(
+            model=self._model,
+            max_tokens=8192,
+            messages=[{
+                "role": "user",
+                "content": [
+                    {
+                        "type": "image",
+                        "source": {
+                            "type": "base64",
+                            "media_type": "image/png",
+                            "data": b64,
+                        },
+                    },
+                    {"type": "text", "text": prompt},
+                ],
+            }],
+        )
+        if not response.content:
+            return ""
+        return response.content[0].text
 
 
 # ---------------------------------------------------------------------------
@@ -150,6 +189,25 @@ class OpenAIProvider:
             delta = chunk.choices[0].delta.content
             if delta:
                 yield delta
+
+    async def vision(self, image_bytes: bytes, prompt: str) -> str:
+        """Send a single image with a text prompt and return the response text."""
+        b64 = base64.b64encode(image_bytes).decode("ascii")
+        response = await self._client().chat.completions.create(
+            model=self._model,
+            max_tokens=8192,
+            messages=[{
+                "role": "user",
+                "content": [
+                    {
+                        "type": "image_url",
+                        "image_url": {"url": f"data:image/png;base64,{b64}"},
+                    },
+                    {"type": "text", "text": prompt},
+                ],
+            }],
+        )
+        return response.choices[0].message.content or ""
 
 
 # ---------------------------------------------------------------------------

@@ -8,13 +8,15 @@ duplicate detection, and persistence of confirmed import rows.
 
 from __future__ import annotations
 
-import base64
 import json
 import logging
 import re
 from collections.abc import AsyncIterator
+from datetime import date as date_type
 from datetime import datetime, timezone
 from typing import TYPE_CHECKING
+
+from pydantic import BaseModel, Field, field_validator
 
 import httpx
 from sqlalchemy import func, select
@@ -33,6 +35,52 @@ if TYPE_CHECKING:
     from sqlalchemy.ext.asyncio import AsyncSession
 
 logger = logging.getLogger("app.import_service")
+
+
+# ---------------------------------------------------------------------------
+# Pydantic validation models for AI-returned row data
+# ---------------------------------------------------------------------------
+
+class TransactionRow(BaseModel):
+    """Validates a transaction row from AI-extracted data before DB insert."""
+    date: date_type
+    amount_milliunits: int
+    description: str = Field(min_length=1, max_length=512)
+    category: str | None = Field(default=None, max_length=256)
+
+    @field_validator("date", mode="before")
+    @classmethod
+    def parse_date(cls, v: object) -> date_type:
+        if isinstance(v, date_type):
+            return v
+        if isinstance(v, str):
+            return date_type.fromisoformat(v)
+        raise ValueError(f"Invalid date value: {v!r}")
+
+    @field_validator("description", mode="before")
+    @classmethod
+    def coerce_description(cls, v: object) -> str:
+        if v is None:
+            raise ValueError("description must not be null")
+        return str(v)
+
+
+class BalanceRow(BaseModel):
+    """Validates a balance row from AI-extracted data before DB insert."""
+    date: date_type
+    amount_milliunits: int
+    notes: str | None = Field(default=None, max_length=512)
+    contribution_milliunits: int | None = None
+    return_bps: int | None = Field(default=None, ge=-100_000, le=100_000)
+
+    @field_validator("date", mode="before")
+    @classmethod
+    def parse_date(cls, v: object) -> date_type:
+        if isinstance(v, date_type):
+            return v
+        if isinstance(v, str):
+            return date_type.fromisoformat(v)
+        raise ValueError(f"Invalid date value: {v!r}")
 
 
 # ---------------------------------------------------------------------------
@@ -230,30 +278,22 @@ async def extract_via_vision(
     """
     Render each PDF page to a PNG image and send to the AI vision API.
 
-    NOTE: This function calls AI SDKs directly because the AIProvider protocol
-    does not yet support image input. This should be refactored when vision
-    support is added to the AIProvider protocol.
+    Uses the AIProvider protocol's vision() method so that all AI SDK
+    imports remain confined to ai_service.py.
     """
     import fitz  # pymupdf
 
-    provider = settings.ai_provider
-    model = settings.ai_model
+    provider = get_ai_provider(settings, master_key)
 
-    if not provider:
-        raise RuntimeError("AI provider is not configured.")
-    if not model:
-        raise RuntimeError("AI model is not configured.")
-
-    # Render PDF pages to base64 PNG images
-    page_images: list[str] = []
+    # Render PDF pages to PNG images
+    page_images: list[bytes] = []
     doc = fitz.open(stream=file_bytes, filetype="pdf")
     try:
         for page in doc:
             # 150 DPI: default is 72, so scale factor = 150/72 ≈ 2.083
             mat = fitz.Matrix(150 / 72, 150 / 72)
             pix = page.get_pixmap(matrix=mat)
-            png_bytes = pix.tobytes("png")
-            page_images.append(base64.b64encode(png_bytes).decode("ascii"))
+            page_images.append(pix.tobytes("png"))
     finally:
         doc.close()
 
@@ -261,78 +301,18 @@ async def extract_via_vision(
         raise RuntimeError("PDF has no pages to render.")
 
     vision_prompt = (
-        "Extract ALL financial data from these document page images. "
+        "Extract ALL financial data from this document page image. "
         "Include every transaction, balance, account name, date, and amount you can find. "
         "Return the data as plain text, preserving the tabular structure where possible."
     )
 
-    if provider == "anthropic":
-        # Import Anthropic SDK inside function body only
-        from anthropic import AsyncAnthropic
+    # Call vision() once per page and concatenate results
+    page_results: list[str] = []
+    for png_bytes in page_images:
+        result = await provider.vision(png_bytes, vision_prompt)
+        page_results.append(result)
 
-        api_key = decrypt(settings.ai_api_key_enc, master_key) if settings.ai_api_key_enc else ""
-        if not api_key:
-            raise RuntimeError("Anthropic API key is not configured.")
-
-        content_blocks: list[dict] = []
-        for b64_img in page_images:
-            content_blocks.append({
-                "type": "image",
-                "source": {
-                    "type": "base64",
-                    "media_type": "image/png",
-                    "data": b64_img,
-                },
-            })
-        content_blocks.append({"type": "text", "text": vision_prompt})
-
-        client = AsyncAnthropic(api_key=api_key)
-        response = await client.messages.create(
-            model=model,
-            max_tokens=8192,
-            messages=[{"role": "user", "content": content_blocks}],
-        )
-        return response.content[0].text
-
-    elif provider in ("openai", "openrouter", "ollama"):
-        # Import OpenAI SDK inside function body only
-        from openai import AsyncOpenAI
-
-        api_key = ""
-        if settings.ai_api_key_enc:
-            api_key = decrypt(settings.ai_api_key_enc, master_key)
-        elif provider != "ollama":
-            raise RuntimeError(f"{provider.capitalize()} API key is not configured.")
-
-        base_url: str | None = None
-        if provider in ("openrouter", "ollama"):
-            if not settings.ai_base_url:
-                raise RuntimeError(f"{provider.capitalize()} base URL is not configured.")
-            base_url = settings.ai_base_url
-
-        content_parts: list[dict] = []
-        for b64_img in page_images:
-            content_parts.append({
-                "type": "image_url",
-                "image_url": {
-                    "url": f"data:image/png;base64,{b64_img}",
-                },
-            })
-        content_parts.append({"type": "text", "text": vision_prompt})
-
-        client = AsyncOpenAI(
-            api_key=api_key or "ollama",
-            base_url=base_url,
-        )
-        response = await client.chat.completions.create(
-            model=model,
-            max_tokens=8192,
-            messages=[{"role": "user", "content": content_parts}],
-        )
-        return response.choices[0].message.content or ""
-
-    else:
-        raise RuntimeError(f"Vision is not supported for provider: {provider!r}")
+    return "\n\n".join(page_results)
 
 
 # ---------------------------------------------------------------------------
@@ -451,25 +431,37 @@ async def save_confirmed_import(
             if row.get("duplicate") == "exact":
                 continue
 
+            try:
+                validated = TransactionRow.model_validate(row)
+            except Exception as exc:
+                logger.warning("Skipping invalid transaction row: %s — %s", row, exc)
+                continue
+
             txn = ExternalTransaction(
                 external_account_id=external_account_id,
-                date=row["date"],
-                amount_milliunits=row["amount_milliunits"],
-                description=row["description"],
-                category=row.get("category"),
+                date=validated.date.isoformat(),
+                amount_milliunits=validated.amount_milliunits,
+                description=validated.description,
+                category=validated.category,
                 import_session_id=session_id,
                 created_at=now_iso,
             )
             db.add(txn)
 
         elif row_type == "balance":
+            try:
+                validated_bal = BalanceRow.model_validate(row)
+            except Exception as exc:
+                logger.warning("Skipping invalid balance row: %s — %s", row, exc)
+                continue
+
             bal = ExternalBalance(
                 external_account_id=external_account_id,
-                balance_milliunits=row["amount_milliunits"],
-                as_of_date=row["date"],
-                notes=row.get("notes"),
-                contribution_milliunits=row.get("contribution_milliunits"),
-                return_bps=row.get("return_bps"),
+                balance_milliunits=validated_bal.amount_milliunits,
+                as_of_date=validated_bal.date.isoformat(),
+                notes=validated_bal.notes,
+                contribution_milliunits=validated_bal.contribution_milliunits,
+                return_bps=validated_bal.return_bps,
                 import_session_id=session_id,
                 created_at=now_iso,
             )

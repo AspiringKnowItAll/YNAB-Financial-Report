@@ -11,6 +11,9 @@ RUN apt-get update && apt-get install -y \
     shared-mime-info \
     && rm -rf /var/lib/apt/lists/*
 
+# Create a non-root user for running the application
+RUN useradd -m -u 1000 appuser
+
 COPY requirements.txt .
 RUN pip install --no-cache-dir -r requirements.txt
 
@@ -18,6 +21,11 @@ COPY app/ ./app/
 
 # /data is the volume mount point for the SQLite DB and key material
 VOLUME ["/data"]
+
+# Ensure appuser owns the app directory and can write to /data
+RUN chown -R appuser:appuser /app && mkdir -p /data && chown appuser:appuser /data
+
+USER appuser
 
 EXPOSE 8080
 
