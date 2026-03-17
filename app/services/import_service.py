@@ -11,6 +11,8 @@ from __future__ import annotations
 import base64
 import json
 import logging
+import re
+from collections.abc import AsyncIterator
 from datetime import datetime, timezone
 from typing import TYPE_CHECKING
 
@@ -25,7 +27,7 @@ from app.models.import_data import (
 )
 from app.models.settings import AppSettings
 from app.services.ai_service import get_ai_provider
-from app.services.encryption import decrypt
+from app.services.encryption import decrypt, encrypt
 
 if TYPE_CHECKING:
     from sqlalchemy.ext.asyncio import AsyncSession
@@ -536,3 +538,113 @@ async def save_institution_profile(
     await db.commit()
     await db.refresh(profile)
     return profile
+
+
+# ---------------------------------------------------------------------------
+# 10. stream_import_chat
+# ---------------------------------------------------------------------------
+
+_IMPORT_CHAT_SYSTEM_PROMPT = """You are an AI assistant helping a user review financial data extracted from a document.
+
+CURRENT EXTRACTED DATA:
+{current_data}
+
+CHAT HISTORY (previous messages):
+{chat_history}
+
+Your job:
+- Answer the user's questions about the extracted data.
+- Correct mistakes the user points out (wrong amounts, wrong dates, missing rows, etc.).
+- If the user tells you about corrections, respond conversationally AND include an updated \
+data block using EXACTLY this format at the END of your response (after your conversational reply):
+  [DATA_UPDATE]{{valid JSON matching the normalization schema}}[/DATA_UPDATE]
+
+  The JSON schema is:
+  {{"institution_name": str|null, "account_name": str|null, "data_type": "transactions"|"balances"|"both"|"unknown",
+   "rows": [{{"type": "transaction"|"balance", ...all fields...}}], "questions": [str], "summary": str}}
+
+  ALL amounts must be in milliunits (dollars × 1000, integer, signed).
+
+- Only include [DATA_UPDATE] when the user has explicitly asked for a correction or update.
+  For purely informational questions, just answer conversationally without [DATA_UPDATE].
+- Keep responses concise and focused on the financial data."""
+
+_DATA_UPDATE_RE = re.compile(r"\[DATA_UPDATE\](.*?)\[/DATA_UPDATE\]", re.DOTALL)
+
+_DATA_UPDATE_SENTINEL = "\x00DATA_UPDATE\x00"
+
+
+async def stream_import_chat(
+    db: AsyncSession,
+    session: ImportSession,
+    user_message: str,
+    settings: AppSettings,
+    master_key: bytes,
+) -> AsyncIterator[str]:
+    """Stream an AI chat response for the import review, yielding text chunks."""
+    # 1. Decode existing messages
+    messages: list[dict[str, str]] = []
+    if session.messages_enc:
+        messages = json.loads(decrypt(session.messages_enc, master_key))
+
+    # 2. Append user message
+    messages.append({"role": "user", "content": user_message})
+
+    # 3. Build current normalization context
+    current_data = "(none)"
+    if session.extracted_data_enc:
+        current_data = decrypt(session.extracted_data_enc, master_key)
+
+    # 4. Build chat history string (all messages before the current one)
+    history_parts: list[str] = []
+    for msg in messages[:-1]:
+        prefix = "User" if msg["role"] == "user" else "Assistant"
+        history_parts.append(f"{prefix}: {msg['content']}")
+    chat_history = "\n".join(history_parts) if history_parts else "(no previous messages)"
+
+    # 5. Build prompts
+    system_prompt = _IMPORT_CHAT_SYSTEM_PROMPT.format(
+        current_data=current_data,
+        chat_history=chat_history,
+    )
+
+    # 6. Stream from AI
+    ai = get_ai_provider(settings, master_key)
+    full_response = ""
+
+    try:
+        async for chunk in ai.stream(
+            system=system_prompt,
+            user=user_message,
+            max_tokens=2048,
+        ):
+            full_response += chunk
+            yield chunk
+    except Exception as exc:
+        logger.error("Import chat AI stream failed: %s", exc, exc_info=True)
+        raise
+
+    # 7. Inspect for DATA_UPDATE block
+    data_update_match = _DATA_UPDATE_RE.search(full_response)
+    if data_update_match:
+        raw_json = data_update_match.group(1)
+        try:
+            parsed_update = json.loads(raw_json)
+            # Save updated extracted data
+            session.extracted_data_enc = encrypt(json.dumps(parsed_update), master_key)
+            # Yield sentinel for the router to detect
+            yield _DATA_UPDATE_SENTINEL + json.dumps(parsed_update)
+        except json.JSONDecodeError:
+            logger.warning("Import chat: AI returned invalid JSON in DATA_UPDATE block")
+
+        # Strip DATA_UPDATE block from the visible response
+        visible_response = _DATA_UPDATE_RE.sub("", full_response).strip()
+    else:
+        visible_response = full_response
+
+    # 8. Save assistant message
+    messages.append({"role": "assistant", "content": visible_response})
+    session.messages_enc = encrypt(json.dumps(messages), master_key)
+
+    # 9. Commit
+    await db.commit()

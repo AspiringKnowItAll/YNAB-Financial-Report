@@ -30,6 +30,8 @@
   var startOverBtn = document.getElementById("start-over-btn");
 
   var selectedFile = null;
+  var currentSessionId = null;
+  var isChatStreaming = false;
 
   // -- Helpers --
 
@@ -88,6 +90,24 @@
     uploadSpinner.classList.remove("spinner--visible");
     hideError();
     profileSelect.selectedIndex = 0;
+
+    currentSessionId = null;
+    isChatStreaming = false;
+    if (chatMessages) {
+      chatMessages.innerHTML = "";
+      var initBubble = document.createElement("div");
+      initBubble.className = "import-bubble import-bubble--assistant";
+      initBubble.textContent = "I've analyzed your document. Do you see anything that needs correction? You can tell me about wrong amounts, missing rows, or any other issues.";
+      chatMessages.appendChild(initBubble);
+    }
+    if (chatInput) {
+      chatInput.value = "";
+      chatInput.disabled = false;
+      chatInput.style.height = "";
+    }
+    if (chatSendBtn) {
+      chatSendBtn.disabled = false;
+    }
 
     reviewState.style.display = "none";
     uploadState.style.display = "block";
@@ -159,6 +179,7 @@
       }
 
       renderReview(data);
+      currentSessionId = data.session_id;
       uploadState.style.display = "none";
       reviewState.style.display = "block";
     } catch (err) {
@@ -338,5 +359,116 @@
   startOverBtn.addEventListener("click", function (e) {
     e.preventDefault();
     resetPage();
+  });
+
+  // -- Chat references --
+  var chatMessages = document.getElementById("chat-messages");
+  var chatInput = document.getElementById("chat-input");
+  var chatSendBtn = document.getElementById("chat-send-btn");
+
+  function appendChatBubble(role, text) {
+    var div = document.createElement("div");
+    div.className = "import-bubble import-bubble--" + role;
+    div.textContent = text;
+    chatMessages.appendChild(div);
+    chatMessages.scrollTop = chatMessages.scrollHeight;
+    return div;
+  }
+
+  function appendDataUpdateNotice() {
+    var div = document.createElement("div");
+    div.className = "data-update-notice";
+    div.textContent = "\u2713 Extracted data updated";
+    chatMessages.appendChild(div);
+    chatMessages.scrollTop = chatMessages.scrollHeight;
+  }
+
+  async function sendChatMessage() {
+    if (isChatStreaming || !currentSessionId) return;
+    var text = chatInput.value.trim();
+    if (!text) return;
+
+    chatInput.value = "";
+    chatInput.style.height = "";
+    isChatStreaming = true;
+    chatSendBtn.disabled = true;
+    chatInput.disabled = true;
+
+    appendChatBubble("user", text);
+
+    var assistantBubble = appendChatBubble("assistant", "");
+    var accumulatedText = "";
+
+    try {
+      var resp = await fetch("/api/import/chat/" + currentSessionId, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ content: text }),
+      });
+
+      if (!resp.ok) {
+        assistantBubble.textContent = "Error: could not reach the server.";
+        return;
+      }
+
+      var reader = resp.body.getReader();
+      var decoder = new TextDecoder();
+      var buffer = "";
+
+      while (true) {
+        var result = await reader.read();
+        if (result.done) break;
+        buffer += decoder.decode(result.value, { stream: true });
+
+        var lines = buffer.split("\n\n");
+        buffer = lines.pop();
+
+        for (var i = 0; i < lines.length; i++) {
+          var line = lines[i];
+          if (!line.startsWith("data: ")) continue;
+          var payload = line.slice(6);
+
+          if (payload === "[DONE]") {
+            break;
+          } else if (payload.startsWith("[ERROR]")) {
+            assistantBubble.textContent = "Error: " + payload.slice(7).trim();
+          } else if (payload.startsWith("[DATA_UPDATE]")) {
+            try {
+              var updatedNorm = JSON.parse(payload.slice("[DATA_UPDATE]".length));
+              renderRowsTable(updatedNorm.rows || [], updatedNorm.data_type || "unknown");
+              appendDataUpdateNotice();
+            } catch (e) {
+              // ignore parse error — table stays as-is
+            }
+          } else {
+            var chunk = payload.replace(/\\n/g, "\n");
+            accumulatedText += chunk;
+            assistantBubble.textContent = accumulatedText;
+            chatMessages.scrollTop = chatMessages.scrollHeight;
+          }
+        }
+      }
+    } catch (err) {
+      assistantBubble.textContent = "Error: " + err.message;
+    } finally {
+      isChatStreaming = false;
+      chatSendBtn.disabled = false;
+      chatInput.disabled = false;
+      chatInput.focus();
+    }
+  }
+
+  chatSendBtn.addEventListener("click", sendChatMessage);
+
+  chatInput.addEventListener("keydown", function (e) {
+    if (e.key === "Enter" && !e.shiftKey) {
+      e.preventDefault();
+      sendChatMessage();
+    }
+  });
+
+  chatInput.addEventListener("input", function () {
+    this.style.height = "";
+    this.style.height = Math.min(this.scrollHeight, 96) + "px";
   });
 })();

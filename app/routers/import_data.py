@@ -6,8 +6,11 @@ import json
 import logging
 from datetime import datetime, timezone
 
+from collections.abc import AsyncIterator
+
 from fastapi import APIRouter, Depends, File, Form, HTTPException, Request, UploadFile
-from fastapi.responses import HTMLResponse, JSONResponse
+from fastapi.responses import HTMLResponse, JSONResponse, StreamingResponse
+from pydantic import BaseModel, Field
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -231,4 +234,62 @@ async def get_session(
             "institution_name": session.institution_name,
             "data_type": session.data_type,
         },
+    )
+
+
+# ---------------------------------------------------------------------------
+# POST /api/import/chat/{session_id} — SSE streaming chat
+# ---------------------------------------------------------------------------
+
+class ImportChatRequest(BaseModel):
+    content: str = Field(min_length=1, max_length=10000)
+
+
+@router.post("/api/import/chat/{session_id}")
+async def import_chat(
+    request: Request,
+    session_id: int,
+    body: ImportChatRequest,
+    db: AsyncSession = Depends(get_db),
+) -> StreamingResponse:
+    master_key: bytes | None = request.app.state.master_key
+    if master_key is None:
+        raise HTTPException(status_code=503, detail="App is locked.")
+
+    result = await db.execute(
+        select(ImportSession).where(ImportSession.id == session_id)
+    )
+    session = result.scalar_one_or_none()
+    if session is None:
+        raise HTTPException(status_code=404, detail="Import session not found.")
+    if session.status != "reviewing":
+        raise HTTPException(status_code=400, detail="Session is not in reviewing state.")
+
+    settings_result = await db.execute(
+        select(AppSettings).where(AppSettings.id == 1)
+    )
+    settings = settings_result.scalar_one_or_none()
+    if settings is None or not settings.settings_complete:
+        raise HTTPException(status_code=503, detail="AI is not configured.")
+
+    async def event_generator() -> AsyncIterator[str]:
+        try:
+            async for chunk in import_service.stream_import_chat(
+                db, session, body.content, settings, master_key
+            ):
+                if chunk.startswith(import_service._DATA_UPDATE_SENTINEL):
+                    data_json = chunk[len(import_service._DATA_UPDATE_SENTINEL) :]
+                    yield f"data: [DATA_UPDATE]{data_json}\n\n"
+                else:
+                    safe_chunk = chunk.replace("\n", "\\n")
+                    yield f"data: {safe_chunk}\n\n"
+            yield "data: [DONE]\n\n"
+        except Exception as exc:
+            logger.error("Import chat stream error: %s", exc, exc_info=True)
+            yield f"data: [ERROR] {exc}\n\n"
+
+    return StreamingResponse(
+        event_generator(),
+        media_type="text/event-stream",
+        headers={"Cache-Control": "no-cache", "X-Accel-Buffering": "no"},
     )
