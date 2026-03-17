@@ -54,7 +54,8 @@ For a full walkthrough, see [docs/setup.md](docs/setup.md).
 | Report export | Download any report as PDF or self-contained HTML |
 | Email delivery | Sends reports via your own SMTP server — no third-party email infrastructure |
 | Notion sync | Optionally posts report summaries to a Notion database |
-| Encrypted storage | All API keys and secrets are encrypted at rest (Fernet/AES); master key derived via Argon2id |
+| External data import | Upload bank/investment PDFs or CSVs; AI normalizes to structured data; user reviews before saving; included in AI reports |
+| Encrypted storage | Entire database encrypted with SQLCipher (AES-256); API keys also receive field-level Fernet encryption; master key derived via Argon2id |
 | Recovery codes | 8 single-use backup codes generated at setup — full access recovery if master password is lost |
 
 ---
@@ -107,7 +108,7 @@ See [AGENTS.md](AGENTS.md) for full security requirements applied to this codeba
 - [x] Automated scheduler (daily / weekly / biweekly / monthly / yearly)
 - [x] Test suite and hardening
 - [x] Life Context Chat — conversational AI financial life story with versioned context blocks
-- [ ] External data import (bank/investment PDFs and CSVs) *(planned)*
+- [x] External data import — upload bank/investment PDFs and CSVs; AI normalizes and extracts data; review and confirm before saving
 - [ ] Dashboard redesign with net worth and external accounts *(planned)*
 - [ ] Notion sync *(post-v1)*
 

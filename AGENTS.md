@@ -345,7 +345,7 @@ Outlier exclusions must be stored in `report_snapshots.outliers_excluded` (JSON 
 | 11 — First-Run Bug Fixes | Complete | Docker build fixes, runtime issues, UX improvements found during first real deployment |
 | 12 — Life Context Chat | Complete | Replace profile wizard with AI-driven chat; user tells their financial life story; AI compresses to an encrypted context block injected into reports; versioned, updateable at any time |
 | 12.5 — Database Encryption | Complete | SQLCipher whole-database encryption (AES-256); one-time plaintext→encrypted migration; lazy DB init after unlock |
-| 13 — External Data Import | Planned | Upload PDF/CSV financial documents; AI normalizes to transaction records or balance snapshots; user confirms before saving; included in AI report prompt; optional YNAB account association |
+| 13 — External Data Import | Complete | Upload PDF/CSV financial documents; AI normalizes to transaction records or balance snapshots; user reviews + corrects via chat; confirms before saving; external accounts and transactions included in AI report prompt |
 | 14 — Dashboard Redesign | Deferred | Full dashboard redesign after Phase 12 + 13 data sources are in place; will include external accounts, net worth, richer dynamic charts |
 
 ---
@@ -436,9 +436,30 @@ Deferred to Phase 13. The `list_models()` return type change and `/api/show` cap
 
 ---
 
+## Phase 13 — External Data Import ✓ Complete
+
+### What Changed
+
+- **`app/models/import_data.py`** — New. Four ORM models: `InstitutionProfile`, `ImportSession`, `ExternalAccount`, `ExternalTransaction`, `ExternalBalance`. All monetary values stored as milliunits. Import session fields (`messages_enc`, `extracted_data_enc`, `file_content_enc`) use Fernet encryption as defense in depth.
+- **`app/services/import_service.py`** — New. Key functions: `extract_text()` (PDF via pdfplumber, CSV/TXT direct), `check_model_vision_capable()` (Ollama `/api/show` query; Anthropic/OpenAI assumed capable), `extract_via_vision()` (PDF→PNG→AI vision OCR via pymupdf), `normalize_with_ai()` (structured JSON via AI), `check_file_duplicate()`, `check_row_duplicates()`, `save_confirmed_import()`, `get_institution_profile()`, `save_institution_profile()`, `stream_import_chat()` (SSE streaming with `[DATA_UPDATE]` sentinel pattern).
+- **`app/routers/import_data.py`** — New. `GET /import`, `POST /api/import/upload`, `GET /api/import/session/{id}`, `POST /api/import/chat/{id}` (SSE), `POST /api/import/confirm/{id}`, `POST /api/import/cancel/{id}`, `DELETE /api/import/institution/{id}`.
+- **`app/templates/import/import.html`** — New. Three-state UI (upload → review → confirmed). Drop zone, institution profile selector, extracted rows table, chat panel with `[DATA_UPDATE]` table refresh, confirm panel with account name/type and institution memory checkbox.
+- **`app/static/js/import.js`** — New. File drop zone, upload via `fetch()`+`FormData`, SSE chat handling, `[DATA_UPDATE]` table refresh, duplicate warning display.
+- **`app/services/report_service.py`** — Queries active `ExternalAccount` rows with latest `ExternalBalance` + `ExternalTransaction` rows for the report month; formats as structured text block injected into AI prompt via `_build_external_data_text()`.
+- **`app/main.py`** — Registered `import_data` router.
+- **`app/database.py`** — Registered new models in `create_all()`.
+- **`app/templates/dashboard/dashboard.html`** — Added Import button next to Sync Now.
+- **`requirements.txt`** — Added `pdfplumber>=0.11.0`, `pymupdf>=1.24.0`.
+
+### Known Issues / Limitations
+
+None. All planned milestones are complete. Dashboard visual integration with external accounts is deferred to Phase 14.
+
+---
+
 ## V2 Roadmap (Phases 12–14)
 
-Phase 12 is complete. Phases 13 and 14 are planned. See the implementation status table.
+Phases 12, 12.5, and 13 are complete. Phase 14 is planned. See the implementation status table.
 
 ### Phase 12 — Life Context Chat ✓ Complete
 
@@ -473,27 +494,13 @@ Phase 12 is complete. Phases 13 and 14 are planned. See the implementation statu
 - Update `app/models/settings.py`: add `life_context_pre_prompt_enc` field
 - Context block hard limit: 5000 characters
 
-### Phase 13 — External Data Import
+### Phase 13 — External Data Import ✓ Complete
+
+> **Implemented. Full specification in [`docs/phase13_plan.md`](docs/phase13_plan.md).**
 
 **Goal:** Allow users to upload PDF or CSV financial documents from any institution (bank statements, 401k statements, brokerage reports, etc.). The AI normalizes the data into a structured form that feeds into reports.
 
-**How it works:**
-- User uploads a file and optionally tells the AI which YNAB account it corresponds to
-- File content is sent to the AI with a normalization prompt
-- AI identifies the data type and normalizes:
-  - **Transaction data** → date, amount (milliunits), description, account name, optional category
-  - **Balance/snapshot data** → account name, account type, balance (milliunits), as-of date, optional fields (contribution amount, return %)
-- User reviews a confirmation preview of what was extracted before anything is saved
-- Normalized data stored in DB; included in AI report prompt at generation time
-- File size limits enforced (e.g., 10MB PDF); large files chunked and summarized
-- For Ollama users: all processing stays local — highlighted in the UI
-
-**Architectural changes:**
-- New DB models: `external_accounts`, `external_transactions`, `external_balances`
-- New router: `import_router.py` with `GET /import`, `POST /api/import/upload`, `POST /api/import/confirm`
-- New service: `import_service.py` — AI normalization logic, chunking, type detection
-- Update `report_service.py` to include external account data and transactions in the AI prompt
-- All external data stored in milliunits (same convention as YNAB data)
+See the Phase 13 section above for a full list of changed files.
 
 ---
 

@@ -13,10 +13,11 @@ from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.models.account import Account
-from app.models.budget import Budget, Category, CategoryGroup
+from app.models.budget import Category, CategoryGroup
 from app.models.life_context import LifeContextBlock
 from app.models.report import ReportSnapshot
 from app.models.settings import AppSettings
+from app.models.import_data import ExternalAccount, ExternalBalance, ExternalTransaction
 from app.models.transaction import Transaction
 from app.services import analysis_service
 from app.services.ai_service import get_ai_provider
@@ -75,6 +76,7 @@ def _build_ai_prompt(
     outlier_months: list[dict],
     life_context: str | None,
     net_worth: int,
+    external_data_text: str | None = None,
 ) -> tuple[str, str]:
     """
     Build (system_prompt, user_prompt) for the AI commentary.
@@ -153,6 +155,9 @@ def _build_ai_prompt(
     if prev_month_label and prev_net is not None:
         user_parts.append(f"- Previous month ({prev_month_label}) net: {_milliunit_to_dollars(prev_net)}")
 
+    if external_data_text:
+        user_parts += ["", "**External Accounts and Transactions**", external_data_text]
+
     if cat_lines:
         user_parts += ["", "**Top Spending Categories**", *cat_lines]
 
@@ -169,6 +174,59 @@ def _build_ai_prompt(
     ]
 
     return system, "\n".join(user_parts)
+
+
+# ---------------------------------------------------------------------------
+# External data text builder
+# ---------------------------------------------------------------------------
+
+def _build_external_data_text(
+    external_accounts: list,
+    latest_balances: dict[int, "ExternalBalance"],
+    external_transactions: list,
+    month: str,
+) -> str | None:
+    """
+    Format external account data as a plain-text block for the AI prompt.
+
+    Returns None if there are no external accounts and no external transactions.
+    """
+    if not external_accounts and not external_transactions:
+        return None
+
+    acct_map: dict[int, ExternalAccount] = {a.id: a for a in external_accounts}
+    sections: list[str] = []
+
+    # Accounts section
+    if external_accounts:
+        lines = ["External Accounts (as of most recent balance dates):"]
+        for acct in external_accounts:
+            bal = latest_balances.get(acct.id)
+            if bal is not None:
+                lines.append(
+                    f"- {acct.name}: {_milliunit_to_dollars(bal.balance_milliunits)} "
+                    f"({acct.account_type}; as of {bal.as_of_date})"
+                )
+            else:
+                lines.append(
+                    f"- {acct.name}: (no balance recorded) ({acct.account_type})"
+                )
+        sections.append("\n".join(lines))
+
+    # Transactions section
+    if external_transactions:
+        lines = [f"External Transactions ({month}):"]
+        for txn in external_transactions:
+            account_name = acct_map[txn.external_account_id].name if txn.external_account_id in acct_map else "Unknown"
+            sign = "+" if txn.amount_milliunits >= 0 else "-"
+            lines.append(
+                f"- {txn.date} | {account_name} | "
+                f"{sign}{_milliunit_to_dollars(abs(txn.amount_milliunits))} | "
+                f"{txn.description}"
+            )
+        sections.append("\n".join(lines))
+
+    return "\n\n".join(sections)
 
 
 # ---------------------------------------------------------------------------
@@ -411,6 +469,53 @@ async def generate_report(
         except Exception:
             life_context_text = None
 
+    # ── External accounts + transactions ─────────────────────────────────
+    external_data_text: str | None = None
+    try:
+        ext_acct_result = await db.execute(
+            select(ExternalAccount).where(ExternalAccount.is_active.is_(True))
+        )
+        ext_accounts = list(ext_acct_result.scalars().all())
+
+        # Latest balance per account (most recent as_of_date)
+        latest_balances: dict[int, ExternalBalance] = {}
+        for acct in ext_accounts:
+            bal_result = await db.execute(
+                select(ExternalBalance)
+                .where(ExternalBalance.external_account_id == acct.id)
+                .order_by(ExternalBalance.as_of_date.desc())
+                .limit(1)
+            )
+            bal = bal_result.scalar_one_or_none()
+            if bal is not None:
+                latest_balances[acct.id] = bal
+
+        # External transactions for the report month
+        month_start = f"{month}-01"
+        _year, _mo = int(month[:4]), int(month[5:7])
+        if _mo == 12:
+            _next_year, _next_mo = _year + 1, 1
+        else:
+            _next_year, _next_mo = _year, _mo + 1
+        month_end = f"{_next_year:04d}-{_next_mo:02d}-01"
+
+        ext_txn_result = await db.execute(
+            select(ExternalTransaction).where(
+                ExternalTransaction.date >= month_start,
+                ExternalTransaction.date < month_end,
+            )
+        )
+        ext_transactions = list(ext_txn_result.scalars().all())
+
+        external_data_text = _build_external_data_text(
+            ext_accounts, latest_balances, ext_transactions, month
+        )
+    except Exception:
+        import logging as _logging
+        _logging.getLogger("app.services.report_service").exception(
+            "Failed to load external data for report"
+        )
+
     # ── AI commentary ─────────────────────────────────────────────────────
     ai_commentary: str | None = None
     if settings.ai_provider:
@@ -424,6 +529,7 @@ async def generate_report(
                 outlier_months=outlier_months,
                 life_context=life_context_text,
                 net_worth=net_worth,
+                external_data_text=external_data_text,
             )
             ai_commentary = await ai_provider.generate(
                 system=system_prompt,
