@@ -97,23 +97,25 @@ Services in `app/services/` are the core of the app. They follow these rules:
 
 ```bash
 # Run the full test suite
-pytest
+ALLOW_PLAINTEXT_DB=1 pytest
 
 # Run with verbose output
-pytest -v
+ALLOW_PLAINTEXT_DB=1 pytest -v
 
 # Run only unit tests
-pytest tests/unit/
+ALLOW_PLAINTEXT_DB=1 pytest tests/unit/
 
 # Run only integration tests
-pytest tests/integration/
+ALLOW_PLAINTEXT_DB=1 pytest tests/integration/
 
 # Run a specific file
-pytest tests/unit/test_analysis_service.py -v
+ALLOW_PLAINTEXT_DB=1 pytest tests/unit/test_analysis_service.py -v
 
 # Run with coverage report (requires pytest-cov)
-pytest --cov=app --cov-report=term-missing
+ALLOW_PLAINTEXT_DB=1 pytest --cov=app --cov-report=term-missing
 ```
+
+> **`ALLOW_PLAINTEXT_DB=1` is required when running tests outside Docker.** The app fails fast at startup if `sqlcipher3-binary` is not installed, which is the normal state on a developer host. Setting this env var tells the app to fall back to the standard unencrypted `sqlite3` library so the tests can run. In the Docker container, `sqlcipher3-binary` is always present and this variable must **not** be set.
 
 ### Test structure
 
@@ -125,7 +127,9 @@ tests/
 │   ├── test_auth_service.py     # Master password, recovery codes
 │   ├── test_analysis_service.py # IQR outlier detection, aggregations
 │   ├── test_schemas.py          # All Pydantic input validation schemas
-│   └── test_scheduler.py        # build_trigger, _get_target_month
+│   ├── test_scheduler.py        # build_trigger, _get_target_month
+│   ├── test_database_sqlcipher.py  # SQLCipher fail-fast (ALLOW_PLAINTEXT_DB guard)
+│   └── test_security_hardening.py  # Month validation, SSE error non-leakage
 └── integration/
     ├── conftest.py              # ASGI test client, salt file fixtures
     └── test_middleware.py       # Auth gate redirect chain
@@ -225,6 +229,13 @@ class MyNewProvider:
 
     async def list_models(self) -> list[str]:
         # Return available model IDs sorted alphabetically
+        ...
+
+    async def vision(self, image_bytes: bytes, prompt: str) -> str:
+        # Send an image (PNG bytes) + text prompt to the provider; return extracted text.
+        # Used by external data import (PDF page extraction).
+        # Encode image_bytes as base64 and include in the appropriate content block
+        # format for your provider.
         ...
 ```
 

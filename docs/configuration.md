@@ -29,6 +29,20 @@ The host port the app is accessible on. Change this if port 8080 is already in u
 
 ---
 
+### `ALLOW_PLAINTEXT_DB`
+**Test environments only.** Default: unset (plaintext DB is not permitted)
+
+When set to `1`, allows the app to start without the `sqlcipher3-binary` package installed, falling back to the standard unencrypted `sqlite3` library. This is exclusively for running the test suite on a host machine that does not have SQLCipher installed.
+
+**Do not set this in production.** In a production Docker deployment, `sqlcipher3-binary` is always present and this variable must not be set.
+
+**Example (running tests locally without Docker):**
+```bash
+ALLOW_PLAINTEXT_DB=1 pytest
+```
+
+---
+
 ## Settings UI
 
 All of the following are configured through the browser at `http://localhost:8080/settings`. Values are encrypted before being stored in the database.
@@ -234,6 +248,7 @@ API keys, passwords, and tokens stored in the settings database receive an **add
 | Variable | Where set | Required | Default | Description |
 |---|---|---|---|---|
 | `PORT` | `.env` (optional) | No | `8080` | Host port for the web app |
+| `ALLOW_PLAINTEXT_DB` | `.env` (test only) | No | unset | Set to `1` to allow starting without SQLCipher (unencrypted SQLite fallback). **Never set in production.** |
 | YNAB API Key | Settings UI | Yes | — | YNAB Personal Access Token |
 | YNAB Budget ID | Settings UI | Yes | — | Target budget UUID |
 | AI Provider | Settings UI | Yes | — | `anthropic`, `openai`, `openrouter`, `ollama` |

@@ -296,9 +296,10 @@ class AIProvider(Protocol):
     async def stream(self, system: str, user: str, max_tokens: int) -> AsyncIterator[str]: ...
     async def health_check(self) -> bool: ...
     async def list_models(self) -> list[str]: ...
+    async def vision(self, image_bytes: bytes, prompt: str) -> str: ...
 ```
 
-`stream()` yields tokens one at a time as they arrive from the provider. Used by the Life Context Chat SSE endpoints. `generate()` is still used for batch report generation.
+`stream()` yields tokens one at a time as they arrive from the provider. Used by the Life Context Chat SSE endpoints. `generate()` is used for batch report generation. `vision()` accepts raw PNG image bytes and a text prompt; used by `import_service.extract_via_vision()` for PDF page OCR. All AI SDK imports are confined to `ai_service.py`; no other file may import provider SDKs directly.
 
 Supported providers and their `ai_provider` setting values:
 
@@ -462,7 +463,7 @@ A three-reviewer code audit (Codex, Gemini, Claude) was completed on 2026-03-17.
 
 ## V2 Roadmap (Phases 12–14)
 
-Phases 12, 12.5, and 13 are complete. Phase 13.5 is planned next. Phase 14 follows after 13.5. See the implementation status table.
+Phases 12, 12.5, 13, and 13.5 are complete. Phase 14 is next. See the implementation status table.
 
 ### Phase 12 — Life Context Chat ✓ Complete
 

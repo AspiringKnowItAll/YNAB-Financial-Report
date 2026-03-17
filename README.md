@@ -85,10 +85,13 @@ This app handles personal financial data. Security decisions made in this projec
 
 - **Master password** set in the browser on first run — never stored in plaintext anywhere
 - **Argon2id** key derivation — the encryption key is derived from your password, held in memory only, and never written to disk
-- **Recovery codes** generated after setup — 8 single-use backup codes that can fully restore access if your master password is forgotten
+- **Recovery codes** generated after setup — 8 single-use backup codes that can fully restore access if your master password is forgotten; protected by a threading lock against TOCTOU races
 - **App locks on restart** — enter your master password in the browser to unlock after each container restart
+- **Non-root Docker user** — container runs as `appuser` (UID 1000), not root
 - All secrets stored in SQLite are encrypted at rest using AES (Fernet)
-- All user inputs are validated and sanitized before processing
+- Entire SQLite database encrypted with SQLCipher (AES-256); app fails fast at startup if SQLCipher is not installed
+- All user inputs are validated and sanitized before processing; AI-returned data validated via Pydantic before ORM insert
+- SSE streams and stored AI commentary never leak internal exception details to clients
 - No raw SQL — all database access via SQLAlchemy ORM
 - No data is transmitted to any third party except the AI provider and YNAB API you configure
 
@@ -109,6 +112,7 @@ See [AGENTS.md](AGENTS.md) for full security requirements applied to this codeba
 - [x] Test suite and hardening
 - [x] Life Context Chat — conversational AI financial life story with versioned context blocks
 - [x] External data import — upload bank/investment PDFs and CSVs; AI normalizes and extracts data; review and confirm before saving
+- [x] Security hardening — non-root Docker user, TOCTOU lock on recovery codes, Pydantic row validation, SSE error redaction, SQLCipher fail-fast, atomic file writes, strict month validation
 - [ ] Dashboard redesign with net worth and external accounts *(planned)*
 - [ ] Notion sync *(post-v1)*
 
