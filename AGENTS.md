@@ -346,6 +346,7 @@ Outlier exclusions must be stored in `report_snapshots.outliers_excluded` (JSON 
 | 12 — Life Context Chat | Complete | Replace profile wizard with AI-driven chat; user tells their financial life story; AI compresses to an encrypted context block injected into reports; versioned, updateable at any time |
 | 12.5 — Database Encryption | Complete | SQLCipher whole-database encryption (AES-256); one-time plaintext→encrypted migration; lazy DB init after unlock |
 | 13 — External Data Import | Complete | Upload PDF/CSV financial documents; AI normalizes to transaction records or balance snapshots; user reviews + corrects via chat; confirms before saving; external accounts and transactions included in AI report prompt |
+| 13.5 — Security Hardening | Planned (before Phase 14) | Address all critical/high/medium findings from the 2026-03-17 three-reviewer code audit. Includes one architectural fix (vision AIProvider abstraction) that must precede Phase 14. Full scope in Phase 13.5 section below. |
 | 14 — Dashboard Redesign | Deferred | Full dashboard redesign after Phase 12 + 13 data sources are in place; will include external accounts, net worth, richer dynamic charts |
 
 ---
@@ -455,11 +456,13 @@ Deferred to Phase 13. The `list_models()` return type change and `/api/show` cap
 
 None. All planned milestones are complete. Dashboard visual integration with external accounts is deferred to Phase 14.
 
+A three-reviewer code audit (Codex, Gemini, Claude) was completed on 2026-03-17. Findings are catalogued in `code-review-summary.md`. All critical, high, and medium findings are addressed in Phase 13.5. Low/informational findings are tracked in the Deferred Features section.
+
 ---
 
 ## V2 Roadmap (Phases 12–14)
 
-Phases 12, 12.5, and 13 are complete. Phase 14 is planned. See the implementation status table.
+Phases 12, 12.5, and 13 are complete. Phase 13.5 is planned next. Phase 14 follows after 13.5. See the implementation status table.
 
 ### Phase 12 — Life Context Chat ✓ Complete
 
@@ -504,6 +507,37 @@ See the Phase 13 section above for a full list of changed files.
 
 ---
 
+### Phase 13.5 — Security Hardening (Planned — must complete before Phase 14)
+
+**Goal:** Address all critical, high, and medium findings from the 2026-03-17 code audit (`code-review-summary.md`). One item is an **architectural fix** (vision AIProvider abstraction) that must be resolved before Phase 14 to prevent the violation from propagating into new AI-facing features.
+
+#### Milestone 1 — Architectural Fix (prerequisite for Phase 14)
+
+- **`app/services/import_service.py` + `app/services/ai_service.py`** — Add a `vision(image_bytes: bytes, prompt: str) -> str` method to the `AIProvider` protocol and all provider implementations (`AnthropicProvider`, `OpenAIProvider`). Refactor `extract_via_vision()` in `import_service.py` to call `provider.vision()` instead of importing provider SDKs directly. This resolves the architecture rule violation identified by both Gemini and Claude.
+
+#### Milestone 2 — Critical & High Security Fixes
+
+- **`app/services/auth_service.py`** — Wrap the `use_recovery_code()` read-check-write sequence with a `threading.Lock` to eliminate the TOCTOU race condition (CRIT-1).
+- **`app/services/import_service.py`** — Add Pydantic schema validation (`TransactionRow`, `BalanceRow`) for all AI-returned row data before any ORM insert in `save_confirmed_import()`. Validate: date is a valid ISO date string, `amount_milliunits` is an integer, description is a non-null string ≤512 chars, `return_bps` is in a plausible range (HIGH-1).
+- **`app/services/export_service.py`** — Replace `asyncio.get_event_loop()` with `asyncio.get_running_loop()` (HIGH-3, Python 3.12 correctness).
+- **`app/routers/life_context.py`, `app/routers/import_data.py`, `app/routers/api.py`, `app/services/report_service.py`** — Replace all `str(exc)` in user-facing SSE yields, JSON responses, and stored AI commentary with a generic error message. Log full exceptions server-side only (HIGH-5 / Codex HIGH-1).
+
+#### Milestone 3 — Medium Security & Correctness Fixes
+
+- **`app/routers/api.py`** — Strengthen month parameter validation: use `datetime.strptime(month, "%Y-%m")` and return HTTP 400 on `ValueError` (MED-2 / Codex Medium). Fixes downstream `_last_n_months` edge case in `report_service.py` (MED-3).
+- **`Dockerfile`** — Add a non-root user and `USER` instruction. Set `/data` volume permissions appropriately (MED-8).
+- **`app/templates/reports/report_detail.html`** — Fix dead `/setup` nav link — update to `/profile` (Codex Medium).
+- **`app/database.py`** — Fail fast (raise + clear error) if `sqlcipher3-binary` is unavailable in a non-test environment. Gate any plaintext fallback behind an explicit env flag (`ALLOW_PLAINTEXT_DB=1`) for tests only (Codex Medium).
+- **`app/services/auth_service.py`** — Use atomic write for `recovery_keys.json`: write to a temp file and call `os.replace()` (LOW-2).
+- **`app/routers/settings.py`** — Standardize boolean form field parsing to explicit `== "1"` comparison for all checkbox/boolean fields (Codex Low).
+
+#### Milestone 4 — Test Fixes
+
+- **`tests/unit/test_auth_service.py`** — Replace `asyncio.get_event_loop().run_until_complete()` with `async`/`pytest-asyncio` pattern (LOW-3).
+- Add tests for: invalid month values returning HTTP 400; SSE error paths not including raw exception text in the yielded event.
+
+---
+
 ## Deferred Features
 
 Do not implement these until explicitly requested:
@@ -514,6 +548,22 @@ Do not implement these until explicitly requested:
 - Per-month user annotations on reports
 - Mobile-optimized layout
 - Per-category outlier threshold configuration (user-defined IQR multiplier or fixed dollar threshold per category; currently the global Tukey 1.5×IQR fence is applied uniformly)
+
+### Technical Debt (from 2026-03-17 code audit — low/informational findings)
+
+These are correctness, performance, and hygiene items that carry no architectural risk if deferred. Address opportunistically or in a future maintenance pass:
+
+- **N+1 query optimization** — `check_row_duplicates` in `import_service.py` issues one DB query per row; `generate_report` in `report_service.py` issues one query per external account for latest balance. Batch-load instead. (`code-review-summary.md` HIGH-2/LOW N+1)
+- **`[DATA_UPDATE]` prompt injection sentinel** — Replace bracket-form `[DATA_UPDATE]...[/DATA_UPDATE]` with null-byte or GUID-based delimiter to prevent crafted document content from triggering the data-update parser. (`code-review-summary.md` MED-5)
+- **`Content-Disposition` filename sanitization** — Use `urllib.parse.quote()` on all `Content-Disposition` filename parameters in `export.py` and `import_data.py`. (`code-review-summary.md` MED-6)
+- **Auth gate DB query caching** — Once the app is unlocked and settings are confirmed, cache `settings_complete` in `app.state` to avoid a DB round-trip on every request. (`code-review-summary.md` LOW-8)
+- **Pin dependency versions** — Generate a `requirements-frozen.txt` with exact pins for reproducible Docker production builds. (`code-review-summary.md` LOW-5)
+- **SMTP logic deduplication** — The `/api/test/smtp` and `/api/test/smtp/send` handlers in `api.py` duplicate the TLS detection and connection logic from `email_service.test_smtp_connection`. Refactor the handlers to delegate to the service. (`code-review-summary.md` LOW-3)
+- **`milliunit_to_dollars` sign placement** — Negative values render as `$-1,234.56` instead of `-$1,234.56`. Fix in `templates_config.py`. (`code-review-summary.md` LOW-10)
+- **Dashboard transaction memory bound** — `dashboard.py` loads all non-deleted transactions with no `LIMIT`. Cap at last 24 months to match the chart window. (`code-review-summary.md` LOW-7)
+- **`check_row_duplicates` near-match bug** — Near-match description is overwritten by each successive candidate; the last one wins rather than the most relevant. Fix inner-loop exit logic. (`code-review-summary.md` LOW-4)
+- **MIME magic-byte validation** — Supplement client-reported `content_type` check in the upload handler with a magic-byte prefix check (`%PDF-` for PDFs; UTF-8 decode attempt for CSV/TXT). (`code-review-summary.md` MED-7)
+- **`apply_migrations` comment** — Add a code comment in `database.py` stating that all values in `_new_columns` must be hardcoded string literals — never runtime variables — to prevent a future SQL injection surface. (`code-review-summary.md` HIGH-4 note)
 
 ---
 
