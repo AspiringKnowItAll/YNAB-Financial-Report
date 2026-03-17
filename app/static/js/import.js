@@ -109,6 +109,29 @@
       chatSendBtn.disabled = false;
     }
 
+    if (confirmPanel) {
+      confirmPanel.classList.remove("open");
+    }
+    if (confirmError) {
+      confirmError.style.display = "none";
+    }
+    if (confirmSaveBtn) {
+      confirmSaveBtn.disabled = false;
+      confirmSaveBtn.textContent = "Save Import";
+    }
+    if (confirmBtn) {
+      confirmBtn.disabled = false;
+    }
+    if (confirmAccountName) {
+      confirmAccountName.value = "";
+    }
+    if (confirmSaveProfile) {
+      confirmSaveProfile.checked = false;
+    }
+    if (confirmedState) {
+      confirmedState.style.display = "none";
+    }
+
     reviewState.style.display = "none";
     uploadState.style.display = "block";
   }
@@ -471,4 +494,119 @@
     this.style.height = "";
     this.style.height = Math.min(this.scrollHeight, 96) + "px";
   });
+
+  // -- Confirm / Cancel / Institution profile management (Milestone 5) --
+
+  var confirmBtn = document.getElementById("confirm-btn");
+  var confirmPanel = document.getElementById("confirm-panel");
+  var confirmAccountName = document.getElementById("confirm-account-name");
+  var confirmAccountType = document.getElementById("confirm-account-type");
+  var confirmSaveProfile = document.getElementById("confirm-save-profile");
+  var confirmSaveBtn = document.getElementById("confirm-save-btn");
+  var confirmBackBtn = document.getElementById("confirm-back-btn");
+  var confirmError = document.getElementById("confirm-error");
+  var confirmedState = document.getElementById("confirmed-state");
+  var profilesToggleBtn = document.getElementById("profiles-toggle-btn");
+  var profilesList = document.getElementById("profiles-list");
+
+  if (confirmBtn) {
+    confirmBtn.addEventListener("click", function () {
+      // Pre-fill account name from the summary card if available
+      var instEl = document.getElementById("sc-institution");
+      if (instEl && instEl.textContent && instEl.textContent !== "Unknown institution") {
+        confirmAccountName.value = instEl.textContent;
+      }
+      confirmPanel.classList.add("open");
+      confirmBtn.disabled = true;
+      confirmAccountName.focus();
+    });
+  }
+
+  if (confirmBackBtn) {
+    confirmBackBtn.addEventListener("click", function () {
+      confirmPanel.classList.remove("open");
+      confirmError.style.display = "none";
+      confirmBtn.disabled = false;
+    });
+  }
+
+  if (confirmSaveBtn) {
+    confirmSaveBtn.addEventListener("click", async function () {
+      var accountName = confirmAccountName.value.trim();
+      if (!accountName) {
+        confirmError.textContent = "Account name is required.";
+        confirmError.style.display = "block";
+        return;
+      }
+
+      confirmError.style.display = "none";
+      confirmSaveBtn.disabled = true;
+      confirmSaveBtn.textContent = "Saving\u2026";
+
+      try {
+        var resp = await fetch("/api/import/confirm/" + currentSessionId, {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            account_name: accountName,
+            account_type: confirmAccountType.value,
+            save_institution_profile: confirmSaveProfile.checked,
+          }),
+        });
+        var data = await resp.json();
+
+        if (!resp.ok || data.status !== "success") {
+          throw new Error(data.message || data.detail || "Confirm failed.");
+        }
+
+        // Show confirmed state
+        reviewState.style.display = "none";
+        confirmedState.style.display = "block";
+      } catch (err) {
+        confirmError.textContent = err.message || "Failed to save import.";
+        confirmError.style.display = "block";
+        confirmSaveBtn.disabled = false;
+        confirmSaveBtn.textContent = "Save Import";
+      }
+    });
+  }
+
+  // Replace the existing cancelBtn listener with one that calls the cancel endpoint
+  if (cancelBtn) {
+    cancelBtn.onclick = async function () {
+      if (currentSessionId) {
+        try {
+          await fetch("/api/import/cancel/" + currentSessionId, { method: "POST" });
+        } catch (e) {
+          // Fire-and-forget — reset regardless
+        }
+      }
+      resetPage();
+    };
+  }
+
+  if (profilesToggleBtn && profilesList) {
+    profilesToggleBtn.addEventListener("click", function () {
+      var isOpen = profilesList.classList.toggle("open");
+      document.getElementById("profiles-toggle-icon").textContent = isOpen ? "\u25B2" : "\u25BC";
+    });
+  }
+
+  window.deleteInstitutionProfile = async function (profileId, btn) {
+    if (!confirm("Delete this institution profile? This cannot be undone.")) return;
+    btn.disabled = true;
+    try {
+      var resp = await fetch("/api/import/institution/" + profileId, { method: "DELETE" });
+      if (resp.ok) {
+        var row = document.getElementById("profile-row-" + profileId);
+        if (row) row.remove();
+      } else {
+        btn.disabled = false;
+        alert("Failed to delete profile.");
+      }
+    } catch (e) {
+      btn.disabled = false;
+      alert("Failed to delete profile.");
+    }
+  };
 })();

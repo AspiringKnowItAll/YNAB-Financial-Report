@@ -11,11 +11,11 @@ from collections.abc import AsyncIterator
 from fastapi import APIRouter, Depends, File, Form, HTTPException, Request, UploadFile
 from fastapi.responses import HTMLResponse, JSONResponse, StreamingResponse
 from pydantic import BaseModel, Field
-from sqlalchemy import select
+from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.database import get_db
-from app.models.import_data import ImportSession, InstitutionProfile
+from app.models.import_data import ExternalAccount, ImportSession, InstitutionProfile
 from app.models.settings import AppSettings
 from app.services import import_service
 from app.services.encryption import decrypt, encrypt
@@ -293,3 +293,166 @@ async def import_chat(
         media_type="text/event-stream",
         headers={"Cache-Control": "no-cache", "X-Accel-Buffering": "no"},
     )
+
+
+# ---------------------------------------------------------------------------
+# POST /api/import/confirm/{session_id} — confirm import and save rows
+# ---------------------------------------------------------------------------
+
+class ImportConfirmRequest(BaseModel):
+    account_name: str = Field(min_length=1, max_length=256)
+    account_type: str = Field(min_length=1, max_length=32)
+    save_institution_profile: bool = False
+
+
+@router.post("/api/import/confirm/{session_id}")
+async def confirm_import(
+    request: Request,
+    session_id: int,
+    body: ImportConfirmRequest,
+    db: AsyncSession = Depends(get_db),
+) -> JSONResponse:
+    master_key: bytes | None = request.app.state.master_key
+    if master_key is None:
+        raise HTTPException(status_code=503, detail="App is locked.")
+
+    result = await db.execute(
+        select(ImportSession).where(ImportSession.id == session_id)
+    )
+    session = result.scalar_one_or_none()
+    if session is None:
+        raise HTTPException(status_code=404, detail="Import session not found.")
+    if session.status != "reviewing":
+        return JSONResponse(
+            status_code=400,
+            content={"status": "error", "message": "Session is not in reviewing state."},
+        )
+
+    # Find or create ExternalAccount
+    acct_result = await db.execute(
+        select(ExternalAccount).where(
+            func.lower(ExternalAccount.name) == body.account_name.lower(),
+            ExternalAccount.is_active.is_(True),
+        )
+    )
+    account = acct_result.scalar_one_or_none()
+    if account is None:
+        now_iso = datetime.now(timezone.utc).isoformat()
+        account = ExternalAccount(
+            name=body.account_name,
+            institution=session.institution_name,
+            account_type=body.account_type,
+            is_active=True,
+            created_at=now_iso,
+        )
+        db.add(account)
+        await db.commit()
+        await db.refresh(account)
+
+    # Save confirmed import rows
+    try:
+        await import_service.save_confirmed_import(
+            session.id, account.id, db, master_key
+        )
+    except ValueError as exc:
+        return JSONResponse(
+            status_code=400,
+            content={"status": "error", "message": str(exc)},
+        )
+    except Exception:
+        logger.exception("Unexpected error during import confirmation")
+        return JSONResponse(
+            status_code=500,
+            content={"status": "error", "message": "Internal error during import confirmation."},
+        )
+
+    # Count rows for the response message
+    row_count = "some"
+    try:
+        extracted = json.loads(decrypt(session.extracted_data_enc, master_key))
+        rows = extracted.get("rows", [])
+        row_count = str(len(rows))
+    except Exception:
+        pass  # Use fallback "some"
+
+    # Optionally save institution profile
+    if body.save_institution_profile and session.institution_name:
+        try:
+            extracted_data = json.loads(decrypt(session.extracted_data_enc, master_key))
+            rows_list = extracted_data.get("rows", [])
+            format_hints_dict = {
+                "data_type": extracted_data.get("data_type"),
+                "rows_schema_sample": rows_list[0] if rows_list else None,
+            }
+            await import_service.save_institution_profile(
+                session.institution_name,
+                json.dumps(format_hints_dict),
+                f"Learned from {session.file_name}",
+                db,
+            )
+        except Exception:
+            logger.warning("Failed to save institution profile during confirm")
+
+    return JSONResponse(
+        status_code=200,
+        content={
+            "status": "success",
+            "account_id": account.id,
+            "message": f"Import confirmed. {row_count} rows saved.",
+        },
+    )
+
+
+# ---------------------------------------------------------------------------
+# POST /api/import/cancel/{session_id} — cancel an import session
+# ---------------------------------------------------------------------------
+
+@router.post("/api/import/cancel/{session_id}")
+async def cancel_import(
+    request: Request,
+    session_id: int,
+    db: AsyncSession = Depends(get_db),
+) -> JSONResponse:
+    master_key: bytes | None = request.app.state.master_key
+    if master_key is None:
+        raise HTTPException(status_code=503, detail="App is locked.")
+
+    result = await db.execute(
+        select(ImportSession).where(ImportSession.id == session_id)
+    )
+    session = result.scalar_one_or_none()
+    if session is None:
+        raise HTTPException(status_code=404, detail="Import session not found.")
+    if session.status == "confirmed":
+        return JSONResponse(
+            status_code=400,
+            content={"status": "error", "message": "Cannot cancel a confirmed import."},
+        )
+
+    session.status = "cancelled"
+    session.file_content_enc = None
+    await db.commit()
+
+    return JSONResponse(status_code=200, content={"status": "success"})
+
+
+# ---------------------------------------------------------------------------
+# DELETE /api/import/institution/{profile_id} — delete institution profile
+# ---------------------------------------------------------------------------
+
+@router.delete("/api/import/institution/{profile_id}")
+async def delete_institution_profile(
+    profile_id: int,
+    db: AsyncSession = Depends(get_db),
+) -> JSONResponse:
+    result = await db.execute(
+        select(InstitutionProfile).where(InstitutionProfile.id == profile_id)
+    )
+    profile = result.scalar_one_or_none()
+    if profile is None:
+        raise HTTPException(status_code=404, detail="Institution profile not found.")
+
+    await db.delete(profile)
+    await db.commit()
+
+    return JSONResponse(status_code=200, content={"status": "success"})
