@@ -21,7 +21,7 @@ modified; outlier exclusion only affects average calculations.
 import statistics
 from collections import defaultdict
 
-from app.schemas.report import MonthlyTotals, OutlierRecord
+from app.schemas.report import MonthlyTotals
 
 
 # ---------------------------------------------------------------------------

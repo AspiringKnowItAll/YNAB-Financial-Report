@@ -12,7 +12,6 @@ Covers:
                              raw_average vs adjusted average
 """
 
-import pytest
 
 from app.services.analysis_service import (
     compute_category_averages,

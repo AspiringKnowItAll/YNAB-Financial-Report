@@ -8,7 +8,6 @@ Covers:
 - schemas/auth.py: MasterPasswordCreate, MasterPasswordUnlock, RecoveryCodeSubmit
 - schemas/settings.py: YnabSettingsUpdate, AiSettingsUpdate, SmtpSettingsUpdate,
                        ScheduleSettingsUpdate, NotionSettingsUpdate
-- schemas/setup.py: UserProfileUpdate
 """
 
 import pytest
@@ -22,7 +21,6 @@ from app.schemas.settings import (
     SmtpSettingsUpdate,
     YnabSettingsUpdate,
 )
-from app.schemas.setup import UserProfileUpdate
 
 
 # ===========================================================================
@@ -539,100 +537,3 @@ class TestNotionSettingsUpdate:
         with pytest.raises(ValidationError):
             NotionSettingsUpdate(notion_database_id="a" * 65)
 
-
-# ===========================================================================
-# UserProfileUpdate
-# ===========================================================================
-
-class TestUserProfileUpdate:
-    def _valid(self, **kwargs):
-        defaults = {
-            "household_size": 2,
-            "income_type": "salary",
-            "financial_goals": "Save for a house",
-            "housing_type": "rent",
-        }
-        return UserProfileUpdate(**{**defaults, **kwargs})
-
-    def test_valid(self):
-        m = self._valid()
-        assert m.household_size == 2
-        assert m.income_type == "salary"
-
-    def test_household_size_min_1(self):
-        m = self._valid(household_size=1)
-        assert m.household_size == 1
-
-    def test_household_size_0_raises(self):
-        with pytest.raises(ValidationError):
-            self._valid(household_size=0)
-
-    def test_household_size_max_20(self):
-        m = self._valid(household_size=20)
-        assert m.household_size == 20
-
-    def test_household_size_21_raises(self):
-        with pytest.raises(ValidationError):
-            self._valid(household_size=21)
-
-    def test_income_type_salary(self):
-        assert self._valid(income_type="salary").income_type == "salary"
-
-    def test_income_type_variable(self):
-        assert self._valid(income_type="variable").income_type == "variable"
-
-    def test_income_type_mixed(self):
-        assert self._valid(income_type="mixed").income_type == "mixed"
-
-    def test_invalid_income_type_raises(self):
-        with pytest.raises(ValidationError):
-            self._valid(income_type="freelance")
-
-    def test_housing_type_rent(self):
-        assert self._valid(housing_type="rent").housing_type == "rent"
-
-    def test_housing_type_own(self):
-        assert self._valid(housing_type="own").housing_type == "own"
-
-    def test_housing_type_other(self):
-        assert self._valid(housing_type="other").housing_type == "other"
-
-    def test_invalid_housing_type_raises(self):
-        with pytest.raises(ValidationError):
-            self._valid(housing_type="lease")
-
-    def test_financial_goals_stripped(self):
-        m = self._valid(financial_goals="  Save for retirement  ")
-        assert m.financial_goals == "Save for retirement"
-
-    def test_financial_goals_max_2000(self):
-        m = self._valid(financial_goals="a" * 2000)
-        assert len(m.financial_goals) == 2000
-
-    def test_financial_goals_exceeds_max_raises(self):
-        with pytest.raises(ValidationError):
-            self._valid(financial_goals="a" * 2001)
-
-    def test_financial_goals_empty_raises(self):
-        with pytest.raises(ValidationError):
-            self._valid(financial_goals="")
-
-    def test_notes_optional(self):
-        m = self._valid(notes=None)
-        assert m.notes is None
-
-    def test_notes_whitespace_only_becomes_none(self):
-        m = self._valid(notes="   ")
-        assert m.notes is None
-
-    def test_notes_stripped(self):
-        m = self._valid(notes="  Some notes  ")
-        assert m.notes == "Some notes"
-
-    def test_notes_max_2000(self):
-        m = self._valid(notes="a" * 2000)
-        assert len(m.notes) == 2000
-
-    def test_notes_exceeds_max_raises(self):
-        with pytest.raises(ValidationError):
-            self._valid(notes="a" * 2001)

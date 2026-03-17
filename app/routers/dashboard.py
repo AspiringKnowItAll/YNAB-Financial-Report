@@ -14,7 +14,6 @@ before injection into <script> tags.
 """
 
 import json
-from collections import defaultdict
 from datetime import date
 
 from fastapi import APIRouter, Depends, Request

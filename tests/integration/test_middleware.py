@@ -11,7 +11,6 @@ The app lifespan is NOT started in these tests — app.state and os.path.exists
 are controlled directly via fixtures and monkeypatch.
 """
 
-import pytest
 
 
 # ---------------------------------------------------------------------------

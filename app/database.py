@@ -4,14 +4,20 @@ from collections.abc import AsyncGenerator
 from pathlib import Path
 
 import aiosqlite.core
-import sqlcipher3  # type: ignore[import-untyped]
 from sqlalchemy import event, text
 from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker, create_async_engine
 from sqlalchemy.orm import DeclarativeBase
 
-# Monkey-patch aiosqlite to use sqlcipher3 instead of stdlib sqlite3.
-# Must happen before any engine or connection is created.
-aiosqlite.core.sqlite3 = sqlcipher3  # type: ignore[attr-defined]
+try:
+    import sqlcipher3  # type: ignore[import-untyped]
+    # Monkey-patch aiosqlite to use sqlcipher3 instead of stdlib sqlite3.
+    # Must happen before any engine or connection is created.
+    aiosqlite.core.sqlite3 = sqlcipher3  # type: ignore[attr-defined]
+except ImportError:
+    # Fallback for environments without SQLCipher (e.g. running tests on the
+    # host without Docker).  The database will not be encrypted in this mode;
+    # production always runs inside Docker where sqlcipher3-binary is installed.
+    import sqlite3 as sqlcipher3  # type: ignore[assignment]
 
 logger = logging.getLogger("app.database")
 

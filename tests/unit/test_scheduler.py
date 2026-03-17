@@ -13,7 +13,6 @@ from datetime import date
 from types import SimpleNamespace
 from unittest.mock import patch
 
-import pytest
 from apscheduler.triggers.cron import CronTrigger
 
 from app.scheduler import _get_target_month, build_trigger
