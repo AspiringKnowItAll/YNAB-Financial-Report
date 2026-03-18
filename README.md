@@ -113,7 +113,7 @@ See [AGENTS.md](AGENTS.md) for full security requirements applied to this codeba
 - [x] Life Context Chat — conversational AI financial life story with versioned context blocks
 - [x] External data import — upload bank/investment PDFs and CSVs; AI normalizes and extracts data; review and confirm before saving
 - [x] Security hardening — non-root Docker user, TOCTOU lock on recovery codes, Pydantic row validation, SSE error redaction, SQLCipher fail-fast, atomic file writes, strict month validation
-- [~] Dashboard redesign — multi-dashboard builder with gridstack.js drag/resize, 17 configurable widget types, per-widget filters *(in progress — M1 foundation + M2 builder complete)*
+- [~] Dashboard redesign — multi-dashboard builder with gridstack.js drag/resize, 17 configurable widget types, per-widget filters *(in progress — M1 foundation + M2 builder + M3 core widgets complete)*
 - [ ] Notion sync *(post-v1)*
 
 ---
