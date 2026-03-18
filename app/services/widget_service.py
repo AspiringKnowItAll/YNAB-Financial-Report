@@ -174,8 +174,16 @@ def _parse_config(widget: DashboardWidget) -> dict:
     """Parse widget.config_json safely, returning {} on any error or non-dict result."""
     try:
         parsed = json.loads(widget.config_json or "{}")
-        return parsed if isinstance(parsed, dict) else {}
+        if not isinstance(parsed, dict):
+            logger.warning(
+                "Widget %d: config_json is valid JSON but not an object (%s); using {}",
+                widget.id,
+                type(parsed).__name__,
+            )
+            return {}
+        return parsed
     except (json.JSONDecodeError, TypeError):
+        logger.warning("Widget %d: config_json could not be parsed; using {}", widget.id)
         return {}
 
 
@@ -422,7 +430,12 @@ def _category_breakdown(
     """
     months_in_period = _months_in_range(start_date, end_date)
 
-    # Determine the most recent month in the period that has any spending data
+    # Never compare a partial current month against full-month averages.
+    # Determine the last fully-complete calendar month (yesterday's month).
+    today = date.today()
+    last_complete_month = (today.replace(day=1) - timedelta(days=1)).strftime("%Y-%m")
+
+    # Determine the most recent *complete* month in the period that has spending data
     spending_months = {
         t["date"][:7]
         for t in transactions
@@ -430,7 +443,7 @@ def _category_breakdown(
     }
     target_month: str | None = None
     for m in reversed(months_in_period):
-        if m in spending_months:
+        if m <= last_complete_month and m in spending_months:
             target_month = m
             break
 
