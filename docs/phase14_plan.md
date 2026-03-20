@@ -1,6 +1,6 @@
 # Phase 14 — Dashboard Redesign: Full Specification
 
-> **Status:** In Progress — Milestones 1–5 complete; Milestone 6 next
+> **Status:** In Progress — Milestones 1–6 complete; Milestone 7 next
 > **Author:** Spec finalized 2026-03-17
 > **Prerequisites:** Phases 12, 12.5, 13, and 13.5 must be complete (all are).
 

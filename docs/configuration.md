@@ -230,6 +230,19 @@ The expected annual investment return rate, entered as a percentage (e.g. `7.0` 
 
 Your target retirement savings balance, entered in dollars (e.g. `2000000` for $2,000,000). When set, a horizontal target line is shown on the Savings Projection widget so you can see when your projected savings is expected to reach your goal. Leave blank if not applicable.
 
+### Appearance Settings (Optional)
+
+#### Global Custom CSS
+**Optional.** Default: not set
+
+Arbitrary CSS injected into the `<head>` of every page in the app, just before the `</head>` tag. Use this to override the default color scheme, fonts, spacing, or any visual property across the entire application.
+
+Changes take effect immediately on the next page load after saving. Leave blank to use the default appearance.
+
+Per-dashboard CSS can also be set in the dashboard builder (edit mode) and overrides the global CSS for that dashboard only.
+
+> **Security note:** This is a single-user, self-hosted application. The CSS is stored encrypted on disk (Fernet, same as all other `AppSettings` secrets). It is injected with no sanitization — the same user who configured it is the only user who can view it.
+
 ---
 
 ## Data Security
@@ -286,3 +299,4 @@ API keys, passwords, and tokens stored in the settings database receive an **add
 | Life Context Pre-Prompt | Settings UI (Advanced) | No | built-in | Custom system prompt for Life Context Chat sessions |
 | Expected Return Rate | Settings UI (Projections) | No | 7.0% | Annual return rate % for projection widgets |
 | Retirement Target | Settings UI (Projections) | No | — | Target retirement balance in dollars |
+| Global Custom CSS | Settings UI (Appearance) | No | — | App-wide CSS override injected into every page (encrypted) |

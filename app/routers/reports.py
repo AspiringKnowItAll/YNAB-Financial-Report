@@ -18,6 +18,7 @@ from app.database import get_db
 from app.models.budget import Budget
 from app.models.settings import AppSettings
 from app.services.report_service import get_report, list_reports
+from app.services.settings_service import get_global_custom_css
 
 from app.templates_config import templates
 
@@ -58,11 +59,13 @@ async def list_reports_page(request: Request, db: AsyncSession = Depends(get_db)
     if budget_id:
         reports = await list_reports(db, budget_id)
 
+    global_custom_css = await get_global_custom_css(db, request.app.state.master_key)
     return templates.TemplateResponse(request, "reports/reports_list.html", {
         "budget_name": budget_name,
         "budget_id": budget_id,
         "reports": reports,
         "ai_configured": bool(settings and settings.ai_provider),
+        "global_custom_css": global_custom_css,
         "current_page": "reports",
     })
 
@@ -73,11 +76,13 @@ async def list_reports_page(request: Request, db: AsyncSession = Depends(get_db)
 
 @router.get("/reports/{report_id}", response_class=HTMLResponse)
 async def get_report_page(request: Request, report_id: int, db: AsyncSession = Depends(get_db)):
+    global_custom_css = await get_global_custom_css(db, request.app.state.master_key)
     snapshot = await get_report(db, report_id)
     if snapshot is None:
         return templates.TemplateResponse(request, "placeholder.html", {
             "title": "Report Not Found",
             "message": f"Report #{report_id} does not exist.",
+            "global_custom_css": global_custom_css,
         }, status_code=404)
 
     # Parse stored chart data
@@ -128,5 +133,6 @@ async def get_report_page(request: Request, report_id: int, db: AsyncSession = D
         "outliers": outliers,
         "commentary_html": commentary_html,
         "email_configured": email_configured,
+        "global_custom_css": global_custom_css,
         "current_page": "reports",
     })

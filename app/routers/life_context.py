@@ -20,6 +20,7 @@ from app.database import get_db
 from app.models.life_context import LifeContextSession
 from app.models.settings import AppSettings
 from app.services import life_context_service as lcs
+from app.services.settings_service import get_global_custom_css
 from app.templates_config import templates
 
 router = APIRouter(tags=["life_context"])
@@ -51,11 +52,13 @@ async def get_profile(request: Request, db: AsyncSession = Depends(get_db)):
     block_history = await lcs.get_block_history(db)
     active_session = await lcs.get_active_session(db)
 
+    global_custom_css = await get_global_custom_css(db, request.app.state.master_key)
     return templates.TemplateResponse(request, "life_context/profile.html", {
         "current_block_text": current_block_text,
         "block_history": block_history,
         "has_active_session": active_session is not None,
         "active_session_id": active_session.id if active_session else None,
+        "global_custom_css": global_custom_css,
         "current_page": "profile",
     })
 

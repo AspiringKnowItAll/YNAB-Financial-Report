@@ -137,3 +137,14 @@ class ProjectionSettingsUpdate(BaseModel):
             return val
         except (ValueError, TypeError):
             raise ValueError("Retirement target must be a valid dollar amount.")
+
+
+class AppearanceSettingsUpdate(BaseModel):
+    """Validated input for the appearance (global custom CSS) section."""
+
+    custom_css_global: str | None = Field(default=None, max_length=65536)
+
+    @field_validator("custom_css_global", mode="before")
+    @classmethod
+    def strip_css(cls, v: str | None) -> str | None:
+        return v.strip() if v else None

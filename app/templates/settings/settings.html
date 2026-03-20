@@ -448,6 +448,29 @@
       </div>
     </div>
 
+    {# ── Appearance ────────────────────────────────────────────────── #}
+    <div class="card" style="margin-bottom: 1.5rem;">
+      <div class="section-header" style="margin-top:0;">Appearance <span class="text-muted">(optional)</span></div>
+
+      <p class="text-muted" style="margin-bottom:1.25rem;">
+        Custom CSS is injected into every page of the app, allowing you to override colors, fonts, spacing, or any visual property. Changes take effect on the next page load.
+      </p>
+
+      <div class="form-group">
+        <label for="custom_css_global">Global Custom CSS</label>
+        {# SECURITY NOTE: Single-user self-hosted app. CSS injection is not in scope.
+           The user who can set this CSS is the same user who owns all data.
+           See docs/phase14_plan.md §Security Notes. #}
+        <textarea id="custom_css_global" name="custom_css_global"
+                  rows="10" maxlength="65536"
+                  placeholder="/* Add custom CSS here — applies app-wide */">{{ global_custom_css_value }}</textarea>
+        <div class="field-hint">
+          Applies to all pages. Leave blank to use the default appearance.
+          Per-dashboard CSS can be set in the dashboard editor.
+        </div>
+      </div>
+    </div>
+
     {# ── Advanced ──────────────────────────────────────────────────── #}
     <details style="margin-bottom: 1.5rem;">
       <summary style="cursor:pointer; font-size:0.85rem; font-weight:700; text-transform:uppercase;

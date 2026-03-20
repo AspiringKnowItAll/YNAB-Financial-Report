@@ -17,6 +17,7 @@ from app.database import get_db
 from app.models.settings import AppSettings
 from app.schemas.settings import (
     AiSettingsUpdate,
+    AppearanceSettingsUpdate,
     LifeContextSettingsUpdate,
     NotionSettingsUpdate,
     ProjectionSettingsUpdate,
@@ -25,6 +26,7 @@ from app.schemas.settings import (
     YnabSettingsUpdate,
 )
 from app.services.encryption import decrypt, encrypt
+from app.services.settings_service import get_global_custom_css
 
 from app.templates_config import templates
 
@@ -57,6 +59,8 @@ async def get_settings(request: Request, db: AsyncSession = Depends(get_db)):
         except Exception:
             life_context_pre_prompt_value = ""
 
+    global_custom_css_value = await get_global_custom_css(db, master_key) or ""
+
     context = {
         "settings": settings,
         "has_ynab_key": bool(settings.ynab_api_key_enc),
@@ -66,6 +70,8 @@ async def get_settings(request: Request, db: AsyncSession = Depends(get_db)):
         "has_life_context_pre_prompt": bool(settings.life_context_pre_prompt_enc),
         "life_context_pre_prompt_value": life_context_pre_prompt_value,
         "life_context_pre_prompt_default": DEFAULT_PRE_PROMPT,
+        "global_custom_css_value": global_custom_css_value,
+        "global_custom_css": "",
         "saved": request.query_params.get("saved") == "1",
         "current_page": "settings",
     }
@@ -111,6 +117,8 @@ async def post_settings(
     # Financial projections
     projection_expected_return_rate: str = Form(default=""),
     projection_retirement_target: str = Form(default=""),
+    # Appearance
+    custom_css_global: str = Form(default=""),
 ):
     master_key = request.app.state.master_key
     settings = await _get_or_create_settings(db)
@@ -243,6 +251,17 @@ async def post_settings(
     except Exception as exc:
         _collect_errors(exc, errors, "Financial Projections")
 
+    # --- Appearance (Global Custom CSS) ---
+    try:
+        appearance = AppearanceSettingsUpdate(custom_css_global=custom_css_global or None)
+        if appearance.custom_css_global:
+            settings.custom_css_enc = encrypt(appearance.custom_css_global, master_key)
+        else:
+            # Empty string → clear the CSS
+            settings.custom_css_enc = None
+    except Exception as exc:
+        _collect_errors(exc, errors, "Appearance")
+
     if errors:
         # Snapshot the boolean flags before rollback expires the ORM object.
         has_ynab_key = bool(settings.ynab_api_key_enc)
@@ -252,6 +271,13 @@ async def post_settings(
         await db.rollback()
         # Re-fetch settings so the template has a fully-loaded, non-expired object.
         settings = await _get_or_create_settings(db)
+        from app.services.life_context_service import DEFAULT_PRE_PROMPT
+        lc_error_value = ""
+        if settings.life_context_pre_prompt_enc:
+            try:
+                lc_error_value = decrypt(settings.life_context_pre_prompt_enc, master_key)
+            except Exception:
+                lc_error_value = ""
         context = {
             "settings": settings,
             "has_ynab_key": has_ynab_key,
@@ -259,6 +285,10 @@ async def post_settings(
             "has_smtp_password": has_smtp_password,
             "has_notion_token": has_notion_token,
             "has_life_context_pre_prompt": bool(settings.life_context_pre_prompt_enc),
+            "life_context_pre_prompt_value": lc_error_value,
+            "life_context_pre_prompt_default": DEFAULT_PRE_PROMPT,
+            "global_custom_css_value": custom_css_global,
+            "global_custom_css": "",
             "errors": errors,
             "saved": False,
             "current_page": "settings",
@@ -280,6 +310,14 @@ async def post_settings(
     # exactly which required fields are missing (instead of a silent redirect loop).
     if not settings.settings_complete:
         missing = _missing_requirements(settings)
+        css_value = await get_global_custom_css(db, master_key) or ""
+        lc_value = ""
+        if settings.life_context_pre_prompt_enc:
+            try:
+                lc_value = decrypt(settings.life_context_pre_prompt_enc, master_key)
+            except Exception:
+                lc_value = ""
+        from app.services.life_context_service import DEFAULT_PRE_PROMPT
         context = {
             "settings": settings,
             "has_ynab_key": bool(settings.ynab_api_key_enc),
@@ -287,9 +325,13 @@ async def post_settings(
             "has_smtp_password": bool(settings.smtp_password_enc),
             "has_notion_token": bool(settings.notion_token_enc),
             "has_life_context_pre_prompt": bool(settings.life_context_pre_prompt_enc),
+            "life_context_pre_prompt_value": lc_value,
+            "life_context_pre_prompt_default": DEFAULT_PRE_PROMPT,
             "saved": True,
             "missing": missing,
             "current_page": "settings",
+            "global_custom_css_value": css_value,
+            "global_custom_css": "",
         }
         return templates.TemplateResponse(request, "settings/settings.html", context)
 

@@ -19,6 +19,7 @@ from app.models.import_data import ExternalAccount, ImportSession, InstitutionPr
 from app.models.settings import AppSettings
 from app.services import import_service
 from app.services.encryption import decrypt, encrypt
+from app.services.settings_service import get_global_custom_css
 from app.templates_config import templates
 
 logger = logging.getLogger("app.routers.import_data")
@@ -39,9 +40,11 @@ async def import_page(request: Request, db: AsyncSession = Depends(get_db)):
     result = await db.execute(stmt)
     profiles = result.scalars().all()
 
+    global_custom_css = await get_global_custom_css(db, request.app.state.master_key)
     return templates.TemplateResponse(
         request, "import/import.html", {
             "institution_profiles": profiles,
+            "global_custom_css": global_custom_css,
             "current_page": "import",
         }
     )
