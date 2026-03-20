@@ -47,7 +47,7 @@ For a full walkthrough, see [docs/setup.md](docs/setup.md).
 | Feature | Details |
 |---|---|
 | YNAB sync | Delta sync using `last_knowledge_of_server` — only changed data is fetched after the first run |
-| Multi-dashboard builder | Create unlimited named dashboards with a WYSIWYG drag-and-drop editor; 15 widget types including cards, trend charts, breakdowns, stats tables, and transaction lists |
+| Multi-dashboard builder | Create unlimited named dashboards with a WYSIWYG drag-and-drop editor; 17 widget types including cards, trend charts, breakdowns, projection charts, stats tables, and transaction lists |
 | Interactive charts | Plotly-powered, in-browser charts for spending trends, savings rate, net worth, payee breakdowns, and category rollups |
 | Outlier handling | IQR-based statistical outlier detection removes one-time spikes from trend calculations |
 | AI insights | Works with Anthropic, OpenAI, OpenRouter, or a local Ollama instance |

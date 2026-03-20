@@ -107,3 +107,33 @@ class NotionSettingsUpdate(BaseModel):
     @classmethod
     def strip_fields(cls, v: str | None) -> str | None:
         return v.strip() if v else None
+
+
+class ProjectionSettingsUpdate(BaseModel):
+    """Validated input for the financial projections section of the Settings form."""
+
+    projection_expected_return_rate_pct: float | None = Field(default=None, ge=0.0, le=99.0)
+    projection_retirement_target_dollars: float | None = Field(default=None, ge=0.0)
+
+    @field_validator("projection_expected_return_rate_pct", mode="before")
+    @classmethod
+    def parse_return_rate(cls, v: str | float | None) -> float | None:
+        if v is None or (isinstance(v, str) and not v.strip()):
+            return None
+        try:
+            return float(v)
+        except (ValueError, TypeError):
+            raise ValueError("Expected return rate must be a number between 0 and 99.")
+
+    @field_validator("projection_retirement_target_dollars", mode="before")
+    @classmethod
+    def parse_retirement_target(cls, v: str | float | None) -> float | None:
+        if v is None or (isinstance(v, str) and not v.strip()):
+            return None
+        try:
+            val = float(v)
+            if val < 0:
+                raise ValueError("Retirement target must be a positive amount.")
+            return val
+        except (ValueError, TypeError):
+            raise ValueError("Retirement target must be a valid dollar amount.")

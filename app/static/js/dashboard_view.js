@@ -163,6 +163,26 @@ function renderWidget(bodyEl, data, widgetId) {
     return;
   }
 
+  if (type === 'savings_projection') {
+    if (data.empty || !data.plotly) {
+      bodyEl.innerHTML =
+        '<div class="widget-body__placeholder">Not enough transaction data to generate a projection. Sync more months of data.</div>';
+    } else {
+      renderPlotlyWidget(bodyEl, data, widgetId);
+    }
+    return;
+  }
+
+  if (type === 'investment_tracker') {
+    if (data.empty || !data.plotly) {
+      bodyEl.innerHTML =
+        '<div class="widget-body__placeholder">No external investment accounts found. Upload statements via Import to add accounts.</div>';
+    } else {
+      renderPlotlyWidget(bodyEl, data, widgetId);
+    }
+    return;
+  }
+
   // Fallback for unimplemented types
   bodyEl.innerHTML =
     '<div class="widget-body__placeholder">' +

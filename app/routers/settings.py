@@ -19,6 +19,7 @@ from app.schemas.settings import (
     AiSettingsUpdate,
     LifeContextSettingsUpdate,
     NotionSettingsUpdate,
+    ProjectionSettingsUpdate,
     ScheduleSettingsUpdate,
     SmtpSettingsUpdate,
     YnabSettingsUpdate,
@@ -107,6 +108,9 @@ async def post_settings(
     schedule_send_email: str = Form(default=""),
     # Life context
     life_context_pre_prompt: str = Form(default=""),
+    # Financial projections
+    projection_expected_return_rate: str = Form(default=""),
+    projection_retirement_target: str = Form(default=""),
 ):
     master_key = request.app.state.master_key
     settings = await _get_or_create_settings(db)
@@ -221,6 +225,23 @@ async def post_settings(
     elif not life_context_pre_prompt.strip():
         # Explicit empty string → clear the override (use default pre-prompt)
         settings.life_context_pre_prompt_enc = None
+
+    # --- Financial Projections ---
+    try:
+        proj = ProjectionSettingsUpdate(
+            projection_expected_return_rate_pct=projection_expected_return_rate or None,
+            projection_retirement_target_dollars=projection_retirement_target or None,
+        )
+        if proj.projection_expected_return_rate_pct is not None:
+            settings.projection_expected_return_rate = proj.projection_expected_return_rate_pct / 100.0
+        elif not projection_expected_return_rate.strip():
+            settings.projection_expected_return_rate = None
+        if proj.projection_retirement_target_dollars is not None:
+            settings.projection_retirement_target = int(proj.projection_retirement_target_dollars * 1000)
+        elif not projection_retirement_target.strip():
+            settings.projection_retirement_target = None
+    except Exception as exc:
+        _collect_errors(exc, errors, "Financial Projections")
 
     if errors:
         # Snapshot the boolean flags before rollback expires the ORM object.

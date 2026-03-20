@@ -216,6 +216,20 @@ To revert to the default, clear the textarea and save — an empty field restore
 
 > **Note:** Changes to the pre-prompt only affect new chat sessions. Existing context blocks are unaffected.
 
+### Financial Projections Settings (Optional)
+
+These settings configure the parameters used by the Savings Projection and Investment Tracker dashboard widgets.
+
+#### Expected Annual Return Rate
+**Optional.** Default: 7.0%
+
+The expected annual investment return rate, entered as a percentage (e.g. `7.0` for 7%). Used for compound-interest calculations in the Savings Projection and Investment Tracker widgets. Adjust to reflect your expected portfolio return.
+
+#### Retirement Target Amount
+**Optional.** Default: not set
+
+Your target retirement savings balance, entered in dollars (e.g. `2000000` for $2,000,000). When set, a horizontal target line is shown on the Savings Projection widget so you can see when your projected savings is expected to reach your goal. Leave blank if not applicable.
+
 ---
 
 ## Data Security
@@ -270,3 +284,5 @@ API keys, passwords, and tokens stored in the settings database receive an **add
 | Notion API Key | Settings UI | No | — | Notion integration token (encrypted) |
 | Notion Database ID | Settings UI | No | — | Target Notion database UUID |
 | Life Context Pre-Prompt | Settings UI (Advanced) | No | built-in | Custom system prompt for Life Context Chat sessions |
+| Expected Return Rate | Settings UI (Projections) | No | 7.0% | Annual return rate % for projection widgets |
+| Retirement Target | Settings UI (Projections) | No | — | Target retirement balance in dollars |

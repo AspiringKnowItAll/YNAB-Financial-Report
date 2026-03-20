@@ -421,6 +421,33 @@
       </div>
     </div>
 
+    {# ── Financial Projections ─────────────────────────────────────── #}
+    <div class="card" style="margin-bottom: 1.5rem;">
+      <div class="section-header" style="margin-top:0;">Financial Projections <span class="text-muted">(optional)</span></div>
+
+      <p class="text-muted" style="margin-bottom:1.25rem;">
+        Parameters used by the Savings Projection and Investment Tracker dashboard widgets for forward-looking charts.
+      </p>
+
+      <div class="form-group">
+        <label for="projection_expected_return_rate">Expected Annual Return Rate (%)</label>
+        <input type="number" id="projection_expected_return_rate" name="projection_expected_return_rate"
+               step="0.1" min="0" max="99"
+               value="{{ ((settings.projection_expected_return_rate if settings.projection_expected_return_rate is not none else 0.07) * 100) | round(1) }}"
+               placeholder="7.0" style="max-width: 160px;">
+        <div class="field-hint">Expected annual investment return, as a percentage. Default: 7.0%. Used for compound-interest projections in Savings Projection and Investment Tracker widgets.</div>
+      </div>
+
+      <div class="form-group">
+        <label for="projection_retirement_target">Retirement Target Amount ($) <span class="text-muted">(optional)</span></label>
+        <input type="number" id="projection_retirement_target" name="projection_retirement_target"
+               step="1000" min="0"
+               value="{{ (settings.projection_retirement_target // 1000) if settings.projection_retirement_target is not none else '' }}"
+               placeholder="e.g. 2000000" style="max-width: 220px;">
+        <div class="field-hint">Your target retirement savings balance in dollars. When set, a target line is shown on the Savings Projection widget. Leave blank if not applicable.</div>
+      </div>
+    </div>
+
     {# ── Advanced ──────────────────────────────────────────────────── #}
     <details style="margin-bottom: 1.5rem;">
       <summary style="cursor:pointer; font-size:0.85rem; font-weight:700; text-transform:uppercase;

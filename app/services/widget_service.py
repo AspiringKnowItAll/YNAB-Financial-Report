@@ -1217,6 +1217,245 @@ async def _recent_transactions(
     }
 
 
+def _savings_projection(
+    transactions: list[dict],
+    start_date: str,
+    end_date: str,
+    period_label: str,
+    title: str,
+    annual_return_rate: float,
+    projection_years: int,
+    retirement_target_milliunits: int | None,
+) -> dict:
+    """
+    Return Plotly projection chart for future savings balance using compound interest.
+
+    Computes average monthly net savings from the transactions window, then
+    projects forward `projection_years` years using the given annual return rate.
+    An optional horizontal target line is shown when retirement_target_milliunits is set.
+    """
+    monthly_totals = analysis_service.compute_monthly_totals(transactions, set())
+
+    if not monthly_totals:
+        return {
+            "widget_type": "savings_projection",
+            "title": title,
+            "period": period_label,
+            "empty": True,
+            "plotly": None,
+        }
+
+    avg_monthly_savings = sum(mt.net for mt in monthly_totals) / len(monthly_totals) / 1000.0
+
+    monthly_rate = annual_return_rate / 12
+    total_months = projection_years * 12
+
+    today = date.today()
+    future_dates: list[str] = []
+    projected_balances: list[float] = []
+
+    balance = 0.0
+    for m in range(total_months + 1):
+        month_offset = today.month + m - 1
+        year = today.year + (month_offset // 12)
+        month = (month_offset % 12) + 1
+        future_dates.append(f"{year:04d}-{month:02d}-01")
+        projected_balances.append(round(balance, 2))
+        balance = balance * (1 + monthly_rate) + avg_monthly_savings
+
+    shapes: list[dict] = []
+    annotations: list[dict] = []
+
+    if retirement_target_milliunits is not None:
+        target_dollars = retirement_target_milliunits / 1000.0
+        shapes.append({
+            "type": "line",
+            "x0": future_dates[0],
+            "x1": future_dates[-1],
+            "y0": target_dollars,
+            "y1": target_dollars,
+            "line": {"color": "#ffb347", "width": 1.5, "dash": "dash"},
+            "yref": "y",
+            "xref": "x",
+        })
+        annotations.append({
+            "x": future_dates[-1],
+            "y": target_dollars,
+            "text": f"Target: ${target_dollars:,.0f}",
+            "xanchor": "right",
+            "yanchor": "bottom",
+            "showarrow": False,
+            "font": {"color": "#ffb347", "size": 11},
+        })
+
+    figure = {
+        "data": [
+            {
+                "type": "scatter",
+                "mode": "lines",
+                "name": "Projected Savings",
+                "x": future_dates,
+                "y": projected_balances,
+                "line": {"color": "#4caf82", "width": 2},
+                "fill": "tozeroy",
+                "fillcolor": "rgba(76, 175, 130, 0.1)",
+                "hovertemplate": "%{x|%b %Y}<br>$%{y:,.0f}<extra></extra>",
+            },
+        ],
+        "layout": {
+            **_PLOTLY_BASE_LAYOUT,
+            "height": 280,
+            "margin": {"t": 10, "b": 50, "l": 80, "r": 10},
+            "xaxis": {**_AXIS_STYLE},
+            "yaxis": {**_AXIS_STYLE, "tickprefix": "$", "tickformat": ",.0f"},
+            "shapes": shapes,
+            "annotations": annotations,
+        },
+    }
+
+    return {
+        "widget_type": "savings_projection",
+        "title": title,
+        "period": period_label,
+        "avg_monthly_savings": round(avg_monthly_savings, 2),
+        "annual_return_rate_pct": round(annual_return_rate * 100, 1),
+        "plotly": figure,
+    }
+
+
+async def _investment_tracker(
+    db: AsyncSession,
+    config: dict,
+    title: str,
+    annual_return_rate: float,
+    projection_years: int,
+) -> dict:
+    """
+    Return Plotly chart showing external investment account balance history + projected growth.
+
+    Historical data is shown as solid lines; projections from the most recent
+    balance are shown as dashed lines using compound interest.
+
+    Config keys:
+        included_external_account_ids: list of external account IDs (integers)
+        projection_years: integer 1–30 (default 10)
+    """
+    raw_ext_ids = config.get("included_external_account_ids")
+    ext_ids: list[int] | None = None
+    if isinstance(raw_ext_ids, list) and raw_ext_ids:
+        try:
+            ext_ids = [int(x) for x in raw_ext_ids]
+        except (ValueError, TypeError):
+            ext_ids = None
+
+    # Only include investment/retirement account types — applying compound interest
+    # growth to liabilities (mortgages, credit cards) would be misleading.
+    # Users can narrow further via included_external_account_ids in widget config.
+    query = select(ExternalAccount).where(
+        ExternalAccount.is_active.is_(True),
+        ExternalAccount.account_type.in_(["investment", "retirement"]),
+    )
+    if ext_ids:
+        query = query.where(ExternalAccount.id.in_(ext_ids))
+    result = await db.execute(query)
+    ext_accounts = list(result.scalars().all())
+
+    if not ext_accounts:
+        return {
+            "widget_type": "investment_tracker",
+            "title": title,
+            "empty": True,
+            "plotly": None,
+        }
+
+    today = date.today()
+    total_months = projection_years * 12
+    traces: list[dict] = []
+    colors = [_COLOR_PALETTE[i % len(_COLOR_PALETTE)] for i in range(len(ext_accounts))]
+
+    for idx, ea in enumerate(ext_accounts):
+        color = colors[idx]
+
+        bal_result = await db.execute(
+            select(ExternalBalance)
+            .where(ExternalBalance.external_account_id == ea.id)
+            .order_by(ExternalBalance.as_of_date.asc())
+        )
+        balances = list(bal_result.scalars().all())
+
+        if not balances:
+            continue
+
+        hist_dates = [b.as_of_date for b in balances]
+        hist_values = [b.balance_milliunits / 1000.0 for b in balances]
+
+        traces.append({
+            "type": "scatter",
+            "mode": "lines+markers",
+            "name": ea.name + " (history)",
+            "x": hist_dates,
+            "y": hist_values,
+            "line": {"color": color, "width": 2},
+            "marker": {"size": 5, "color": color},
+            "hovertemplate": "%{x}<br>" + ea.name + ": $%{y:,.0f}<extra></extra>",
+        })
+
+        latest_balance = hist_values[-1]
+        monthly_rate = annual_return_rate / 12
+
+        try:
+            latest_date = date.fromisoformat(hist_dates[-1])
+        except (ValueError, TypeError):
+            latest_date = today
+
+        proj_dates: list[str] = []
+        proj_values: list[float] = []
+        balance = latest_balance
+
+        for m in range(total_months + 1):
+            month_offset = latest_date.month + m - 1
+            year = latest_date.year + (month_offset // 12)
+            month = (month_offset % 12) + 1
+            proj_dates.append(f"{year:04d}-{month:02d}-01")
+            proj_values.append(round(balance, 2))
+            balance = balance * (1 + monthly_rate)
+
+        traces.append({
+            "type": "scatter",
+            "mode": "lines",
+            "name": ea.name + " (projected)",
+            "x": proj_dates,
+            "y": proj_values,
+            "line": {"color": color, "width": 1.5, "dash": "dash"},
+            "hovertemplate": "%{x|%b %Y}<br>" + ea.name + " (proj): $%{y:,.0f}<extra></extra>",
+        })
+
+    if not traces:
+        return {
+            "widget_type": "investment_tracker",
+            "title": title,
+            "empty": True,
+            "plotly": None,
+        }
+
+    figure = {
+        "data": traces,
+        "layout": {
+            **_PLOTLY_BASE_LAYOUT,
+            "height": 300,
+            "margin": {"t": 10, "b": 50, "l": 80, "r": 10},
+            "xaxis": {**_AXIS_STYLE},
+            "yaxis": {**_AXIS_STYLE, "tickprefix": "$", "tickformat": ",.0f"},
+        },
+    }
+
+    return {
+        "widget_type": "investment_tracker",
+        "title": title,
+        "plotly": figure,
+    }
+
+
 # ---------------------------------------------------------------------------
 # Main dispatcher
 # ---------------------------------------------------------------------------
@@ -1263,6 +1502,20 @@ async def _get_widget_data_inner(
     """Inner implementation of get_widget_data -- all exceptions propagate to caller."""
     config = _parse_config(widget)
     title = _widget_title(widget.widget_type, config)
+
+    # investment_tracker: external account history + projected growth (no YNAB txns needed)
+    if widget.widget_type == "investment_tracker":
+        annual_rate = (
+            settings.projection_expected_return_rate
+            if settings is not None and settings.projection_expected_return_rate is not None
+            else 0.07
+        )
+        raw_years = config.get("projection_years", 10)
+        try:
+            projection_years = max(1, min(30, int(raw_years)))
+        except (ValueError, TypeError):
+            projection_years = 10
+        return await _investment_tracker(db, config, title, annual_rate, projection_years)
 
     if settings is None or not settings.ynab_budget_id:
         return {
@@ -1333,6 +1586,22 @@ async def _get_widget_data_inner(
         return _net_savings_card(transactions, period_label, title)
     if widget.widget_type == "savings_rate_card":
         return _savings_rate_card(transactions, period_label, title)
+
+    if widget.widget_type == "savings_projection":
+        annual_rate = (
+            settings.projection_expected_return_rate
+            if settings.projection_expected_return_rate is not None
+            else 0.07
+        )
+        raw_years = config.get("projection_years", 10)
+        try:
+            projection_years = max(1, min(30, int(raw_years)))
+        except (ValueError, TypeError):
+            projection_years = 10
+        return _savings_projection(
+            transactions, start_date, end_date, period_label, title,
+            annual_rate, projection_years, settings.projection_retirement_target,
+        )
 
     # ── Chart/table widgets -- need categories ────────────────────────────
 

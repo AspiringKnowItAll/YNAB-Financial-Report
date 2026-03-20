@@ -349,7 +349,7 @@ Outlier exclusions must be stored in `report_snapshots.outliers_excluded` (JSON 
 | 12.5 — Database Encryption | Complete | SQLCipher whole-database encryption (AES-256); one-time plaintext→encrypted migration; lazy DB init after unlock |
 | 13 — External Data Import | Complete | Upload PDF/CSV financial documents; AI normalizes to transaction records or balance snapshots; user reviews + corrects via chat; confirms before saving; external accounts and transactions included in AI report prompt |
 | 13.5 — Security Hardening | Complete | All critical/high/medium findings from the 2026-03-17 code audit addressed: vision AIProvider abstraction, TOCTOU lock, Pydantic row validation, get_running_loop fix, SSE error redaction, month validation, non-root Docker user, SQLCipher fail-fast, atomic recovery key write, boolean form parsing. |
-| 14 — Dashboard Redesign | In Progress — M4 complete, M5 next | Multi-dashboard builder: named dashboards, left dock, WYSIWYG gridstack.js editor, configurable column grid, per-widget filters (time period, accounts, categories), 17 widget types, per-dashboard + global custom CSS, net worth snapshots, projection widgets. Spec: docs/phase14_plan.md |
+| 14 — Dashboard Redesign | In Progress — M5 complete, M6 next | Multi-dashboard builder: named dashboards, left dock, WYSIWYG gridstack.js editor, configurable column grid, per-widget filters (time period, accounts, categories), 17 widget types, per-dashboard + global custom CSS, net worth snapshots, projection widgets. Spec: docs/phase14_plan.md |
 
 ---
 
@@ -464,7 +464,7 @@ A two-reviewer code audit (Codex, Claude) was completed on 2026-03-17. Findings 
 
 ## V2 Roadmap (Phases 12–14)
 
-Phases 12, 12.5, 13, and 13.5 are complete. Phase 14 (Dashboard Redesign) is in progress — Milestones 1–4 are complete, M5 (projections) is next. See the implementation status table and [`docs/phase14_plan.md`](docs/phase14_plan.md).
+Phases 12, 12.5, 13, and 13.5 are complete. Phase 14 (Dashboard Redesign) is in progress — Milestones 1–5 are complete, M6 (global CSS) is next. See the implementation status table and [`docs/phase14_plan.md`](docs/phase14_plan.md).
 
 ### Phase 12 — Life Context Chat ✓ Complete
 
@@ -579,7 +579,7 @@ See the Phase 13 section above for a full list of changed files.
 - `app/templates/settings/settings.html` — Appearance section (M6) + Financial Projections section (M5)
 - `app/routers/settings.py` — handle new AppSettings fields
 
-**Milestones:** M1 Foundation ✓ → M2 Builder (gridstack) ✓ → M3 Existing Widgets ✓ → M4 New Widgets ✓ → M5 Projections → M6 Global CSS → M7 Reports Integration (TBD)
+**Milestones:** M1 Foundation ✓ → M2 Builder (gridstack) ✓ → M3 Existing Widgets ✓ → M4 New Widgets ✓ → M5 Projections ✓ → M6 Global CSS → M7 Reports Integration (TBD)
 
 ### Milestone 3 — Widget Library: Existing Widgets ✓ Complete
 
