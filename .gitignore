@@ -66,6 +66,12 @@ data/*.db-wal
 data/*.sqlite
 data/*.sqlite3
 
+# --- Auth/runtime data files (generated at first-run, never commit) ---
+data/master.salt
+data/master.verify
+data/recovery_keys.json
+data/migration_complete
+
 # --- Docker ---
 # (docker-compose.yml and Dockerfile are committed; override files are not)
 docker-compose.override.yml

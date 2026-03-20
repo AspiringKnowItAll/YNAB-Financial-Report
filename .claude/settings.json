@@ -24,5 +24,8 @@
     "additionalDirectories": [
       "c:\\Users\\Andrew Lucas\\.claude\\projects\\c--Users-Andrew-Lucas-Documents-GitHub-YNAB-Financial-Report\\memory"
     ]
+  },
+  "enabledPlugins": {
+    "frontend-design@claude-plugins-official": true
   }
 }
