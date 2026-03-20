@@ -463,7 +463,7 @@ A two-reviewer code audit (Codex, Claude) was completed on 2026-03-17. Findings 
 
 ## V2 Roadmap (Phases 12–14)
 
-Phases 12, 12.5, 13, and 13.5 are complete. Phase 14 (Dashboard Redesign) is in progress — Milestones 1 and 2 are complete, M3 (widget data) is next. See the implementation status table and [`docs/phase14_plan.md`](docs/phase14_plan.md).
+Phases 12, 12.5, 13, and 13.5 are complete. Phase 14 (Dashboard Redesign) is in progress — Milestones 1–4 are complete, M5 (projections) is next. See the implementation status table and [`docs/phase14_plan.md`](docs/phase14_plan.md).
 
 ### Phase 12 — Life Context Chat ✓ Complete
 
