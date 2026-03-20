@@ -48,6 +48,15 @@ All PRs must pass `ruff check` and `mypy` with zero errors.
 
 ---
 
+## Agent Workflow Rules
+
+These apply to every coding session — not optional:
+
+- **All code writing → `secure-code-writer` agent.** Never write production code inline in the main conversation. Delegate all implementation work (features, bug fixes, refactors) to the `secure-code-writer` agent.
+- **After every code-writing session → `multi-reviewer-synthesis` agent.** Run it before committing. Fix any issues it raises and resubmit until approved, then auto-commit with a detailed message.
+
+---
+
 ## Architecture
 
 ### Request flow
@@ -68,10 +77,24 @@ The entire SQLite database is encrypted at rest using SQLCipher (AES-256). `data
 `app.state.master_key` (bytes) is the Fernet key, held in memory only. `services/encryption.py` exposes only `encrypt(plaintext: str) -> bytes` and `decrypt(ciphertext: bytes) -> str`. If `master_key` is `None`, both raise — they never silently fail. API keys and passwords in `app_settings` use `LargeBinary` type and an `_enc` name suffix (e.g., `ynab_api_key_enc`) for an additional Fernet encryption layer on top of SQLCipher.
 
 ### AI provider abstraction
-All AI calls go through the `AIProvider` protocol in `services/ai_service.py`. No router or service outside `ai_service.py` may import Anthropic, OpenAI, or any AI SDK directly. The protocol has four methods: `generate()` (batch, used for reports), `stream()` (SSE, used for Life Context Chat), `health_check()`, and `list_models()`. `get_ai_provider()` builds from DB settings; `get_ai_provider_from_params()` builds from plaintext form values (used by the Settings test button without requiring a save first).
+All AI calls go through the `AIProvider` protocol in `services/ai_service.py`. No router or service outside `ai_service.py` may import Anthropic, OpenAI, or any AI SDK directly. The protocol has five methods:
 
-### Life Context Chat (Phase 12)
+- `generate()` — batch text generation, used for reports
+- `stream()` — SSE token streaming, used for Life Context Chat
+- `health_check()` — provider connectivity test
+- `list_models()` — enumerate available models
+- `vision(image_bytes, prompt)` — PDF page OCR, used by `import_service.extract_via_vision()`
+
+`get_ai_provider()` builds from DB settings; `get_ai_provider_from_params()` builds from plaintext form values (used by the Settings test button without requiring a save first).
+
+### Life Context Chat
 The floating chat widget (`static/js/chat_widget.js`) streams AI replies via SSE using `fetch()` + `StreamingResponse`. Sessions are persisted to DB in real time so unfinished sessions survive page navigation. Compression to a `LifeContextBlock` is triggered only by the explicit "End Chat Session" button — never on page close. The decrypted context block text is injected into the AI prompt at report generation time in `report_service.py`.
+
+### External Data Import (Phase 13)
+Users upload PDF or CSV financial documents. `import_service.py` extracts data via AI (PDFs use `vision()`, CSVs use `generate()`). The extracted rows go through Pydantic validation (`TransactionRow`/`BalanceRow` schemas) before any ORM insert. Users review and correct results via a chat-style interface before confirming. Confirmed data lands in `ExternalTransaction`/`ExternalBalance` rows (`models/import_data.py`) and is included in AI report prompts. Key constraint: `ImportSession` rows track state through `pending → confirmed/rejected`; never leave a session in `pending` permanently.
+
+### Dashboard Redesign (Phase 14)
+Multi-dashboard builder with named dashboards, a left dock, a WYSIWYG `gridstack.js` editor, and 17 widget types. Each dashboard has a configurable column grid; each widget has per-widget filters (time period, accounts, categories). Dashboards and their widget configs are stored in `models/dashboard.py`. Two new routers: `routers/dashboards.py` (page routes) and `routers/api_dashboards.py` (JSON API for the editor). Widget data is served as JSON from `/api/dashboards/widget-data/{type}`.
 
 ### Monetary values
 All monetary amounts are stored as YNAB milliunits (integer, dollars × 1000). Conversion to display currency happens **only** in Jinja2 templates via the `milliunit_to_dollars` filter. Never store floating-point dollars; never convert in service or router code.
