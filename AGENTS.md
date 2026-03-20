@@ -655,6 +655,9 @@ These are correctness, performance, and hygiene items that carry no architectura
 - **`apply_migrations` comment** — Add a code comment in `database.py` stating that all values in `_new_columns` must be hardcoded string literals — never runtime variables — to prevent a future SQL injection surface. (`code-review-summary.md` HIGH-4 note)
 - **~~Missing sync button on main dashboard~~** — Fixed: sync status bar (with Import + Sync Now buttons) ported to `dashboard_view.html`; `dashboards.py` route passes `last_sync` scoped by active budget.
 - **~~Inconsistent nav bar across pages~~** — Fixed: canonical 5-link nav extracted to `app/templates/partials/nav.html`; all authenticated templates include it; `base.html` default is empty (auth pages remain nav-free); each router passes `current_page` for active-state highlighting.
+- **Double `AppSettings` fetch on dashboard view** — `dashboard_view` route fetches `AppSettings(id=1)` twice: once in `get_global_custom_css()` and again for `ynab_budget_id`. Consolidate to a single query.
+- **`nav.html` missing `aria-current="page"`** — Active nav link uses only an inline color style. Add `aria-current="page"` attribute for accessibility.
+- **Repo-wide `mypy` errors** — `mypy app` reports pre-existing errors (sqlcipher3 stub, bleach/markdown/weasyprint stubs, api_dashboards grid attrs, ai_service union-attr). These pre-date Phase 14 but should be addressed in a hardening pass.
 
 ---
 

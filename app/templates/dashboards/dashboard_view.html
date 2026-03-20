@@ -111,7 +111,7 @@
           {% elif last_sync.status == "failed" %}
             <span class="sync-dot sync-dot--failed"></span>
             Last sync <strong>failed</strong> on {{ last_sync.started_at[:10] }}
-            &mdash; check sync log for details
+            &mdash; sync failed. Try again or contact support if the issue persists.
           {% else %}
             <span class="sync-dot sync-dot--running"></span>
             Sync <strong>in progress</strong>&hellip;
@@ -179,7 +179,8 @@ document.getElementById('sync-btn').addEventListener('click', async function () 
 
   try {
     var resp = await fetch('/api/sync/trigger', { method: 'POST' });
-    var data = await resp.json();
+    var data = {};
+    try { data = await resp.json(); } catch (_) { /* non-JSON response — treat as failed */ }
     if (resp.ok && data.status === 'success') {
       var added = parseInt(data.transactions_added, 10) || 0;
       var updated = parseInt(data.transactions_updated, 10) || 0;
