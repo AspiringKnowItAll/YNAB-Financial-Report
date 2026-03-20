@@ -66,6 +66,7 @@ async def get_settings(request: Request, db: AsyncSession = Depends(get_db)):
         "life_context_pre_prompt_value": life_context_pre_prompt_value,
         "life_context_pre_prompt_default": DEFAULT_PRE_PROMPT,
         "saved": request.query_params.get("saved") == "1",
+        "current_page": "settings",
     }
     return templates.TemplateResponse(request, "settings/settings.html", context)
 
@@ -239,6 +240,7 @@ async def post_settings(
             "has_life_context_pre_prompt": bool(settings.life_context_pre_prompt_enc),
             "errors": errors,
             "saved": False,
+            "current_page": "settings",
         }
         return templates.TemplateResponse(request, "settings/settings.html", context, status_code=422)
 
@@ -266,6 +268,7 @@ async def post_settings(
             "has_life_context_pre_prompt": bool(settings.life_context_pre_prompt_enc),
             "saved": True,
             "missing": missing,
+            "current_page": "settings",
         }
         return templates.TemplateResponse(request, "settings/settings.html", context)
 

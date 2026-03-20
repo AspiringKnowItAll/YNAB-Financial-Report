@@ -1,0 +1,10 @@
+<nav class="navbar">
+  <span class="navbar__brand">YNAB Financial Report</span>
+  <div class="navbar__links">
+    <a href="/"{% if current_page is defined and current_page == "dashboard" %} style="color: var(--text);"{% endif %}>Dashboard</a>
+    <a href="/reports"{% if current_page is defined and current_page == "reports" %} style="color: var(--text);"{% endif %}>Reports</a>
+    <a href="/import"{% if current_page is defined and current_page == "import" %} style="color: var(--text);"{% endif %}>Import</a>
+    <a href="/profile"{% if current_page is defined and current_page == "profile" %} style="color: var(--text);"{% endif %}>My Financial Profile</a>
+    <a href="/settings"{% if current_page is defined and current_page == "settings" %} style="color: var(--text);"{% endif %}>Settings</a>
+  </div>
+</nav>

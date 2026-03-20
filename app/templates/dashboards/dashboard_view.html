@@ -2,6 +2,8 @@
 
 {% block title %}{{ dashboard.name }} — YNAB Financial Report{% endblock %}
 
+{% block nav %}{% include "partials/nav.html" %}{% endblock %}
+
 {% block extra_head %}
 <link rel="stylesheet" href="/static/css/dashboard.css">
 {# global_custom_css is already injected by base.html — do not add it here again.
@@ -11,19 +13,39 @@
 {% if dashboard.custom_css %}
 <style id="dashboard-custom-css">{{ dashboard.custom_css | safe }}</style>
 {% endif %}
-<script src="https://cdn.plot.ly/plotly-2.35.2.min.js" charset="utf-8"></script>
-{% endblock %}
+<style>
+  /* ── Sync status bar ─────────────────────────────────── */
+  .sync-bar {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    flex-wrap: wrap;
+    gap: 0.75rem;
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: var(--radius);
+    padding: 0.85rem 1.25rem;
+    margin-bottom: 1.5rem;
+    font-size: 0.875rem;
+  }
 
-{% block nav %}
-<nav class="navbar">
-  <span class="navbar__brand">YNAB Financial Report</span>
-  <div class="navbar__links">
-    <a href="/" style="color: var(--text);">Dashboard</a>
-    <a href="/reports">Reports</a>
-    <a href="/profile">My Financial Profile</a>
-    <a href="/settings">Settings</a>
-  </div>
-</nav>
+  .sync-bar__info { color: var(--muted); }
+  .sync-bar__info strong { color: var(--text); }
+
+  .sync-dot {
+    display: inline-block;
+    width: 8px;
+    height: 8px;
+    border-radius: 50%;
+    margin-right: 0.4rem;
+    vertical-align: middle;
+  }
+  .sync-dot--success { background: var(--success); }
+  .sync-dot--failed  { background: var(--danger); }
+  .sync-dot--running { background: var(--warning); }
+  .sync-dot--none    { background: var(--muted); }
+</style>
+<script src="https://cdn.plot.ly/plotly-2.35.2.min.js" charset="utf-8"></script>
 {% endblock %}
 
 {% block content %}
@@ -76,6 +98,41 @@
       </div>
     </div>
 
+    {# ── Sync status bar ──────────────────────────────────────── #}
+    <div class="sync-bar">
+      <div class="sync-bar__info">
+        {% if last_sync %}
+          {% if last_sync.status == "success" %}
+            <span class="sync-dot sync-dot--success"></span>
+            Last sync
+            <strong>{{ last_sync.finished_at[:10] if last_sync.finished_at else last_sync.started_at[:10] }}</strong>
+            &mdash; {{ last_sync.transactions_added }} added,
+            {{ last_sync.transactions_updated }} updated
+          {% elif last_sync.status == "failed" %}
+            <span class="sync-dot sync-dot--failed"></span>
+            Last sync <strong>failed</strong> on {{ last_sync.started_at[:10] }}
+            &mdash; check sync log for details
+          {% else %}
+            <span class="sync-dot sync-dot--running"></span>
+            Sync <strong>in progress</strong>&hellip;
+          {% endif %}
+        {% else %}
+          <span class="sync-dot sync-dot--none"></span>
+          No sync has been run yet.
+        {% endif %}
+      </div>
+      <div style="display:flex;gap:0.5rem;align-items:center;">
+        <a href="/import" class="btn btn--primary"
+           style="padding: 0.45rem 1rem; font-size: 0.85rem; text-decoration: none;">
+          Import
+        </a>
+        <button type="button" id="sync-btn" class="btn btn--primary"
+                style="padding: 0.45rem 1rem; font-size: 0.85rem;">
+          Sync Now
+        </button>
+      </div>
+    </div>
+
     {% if widgets %}
     <div class="widget-grid" data-columns="{{ dashboard.grid_columns }}">
       {% for widget in widgets %}
@@ -112,4 +169,45 @@
 
 <script src="/static/js/chat_widget.js"></script>
 <script src="/static/js/dashboard_view.js"></script>
+<script>
+document.getElementById('sync-btn').addEventListener('click', async function () {
+  var btn = this;
+  var infoEl = document.querySelector('.sync-bar__info');
+  btn.disabled = true;
+  btn.textContent = 'Syncing\u2026';
+  infoEl.innerHTML = '<span class="sync-dot sync-dot--running"></span> Sync <strong>in progress</strong>\u2026';
+
+  try {
+    var resp = await fetch('/api/sync/trigger', { method: 'POST' });
+    var data = await resp.json();
+    if (resp.ok && data.status === 'success') {
+      var added = parseInt(data.transactions_added, 10) || 0;
+      var updated = parseInt(data.transactions_updated, 10) || 0;
+      infoEl.innerHTML =
+        '<span class="sync-dot sync-dot--success"></span> Sync complete &mdash; ' +
+        added + ' added, ' +
+        updated + ' updated';
+      setTimeout(function () { location.reload(); }, 1200);
+    } else {
+      infoEl.innerHTML = '<span class="sync-dot sync-dot--failed"></span> Sync <strong>failed</strong>';
+      if (data.message) {
+        var msg = document.createElement('span');
+        msg.textContent = ' \u2014 ' + data.message;
+        infoEl.appendChild(msg);
+      }
+      btn.disabled = false;
+      btn.textContent = 'Sync Now';
+    }
+  } catch (err) {
+    infoEl.innerHTML = '<span class="sync-dot sync-dot--failed"></span> Sync <strong>failed</strong>';
+    if (err.message) {
+      var errMsg = document.createElement('span');
+      errMsg.textContent = ' \u2014 ' + err.message;
+      infoEl.appendChild(errMsg);
+    }
+    btn.disabled = false;
+    btn.textContent = 'Sync Now';
+  }
+});
+</script>
 {% endblock %}

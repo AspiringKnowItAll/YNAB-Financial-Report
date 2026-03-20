@@ -187,6 +187,7 @@ YNAB-Financial-Report/
 │   ├── services/
 │   │   ├── auth_service.py       # Master password setup, Argon2id KDF, unlock, recovery code key-wrapping
 │   │   ├── encryption.py         # Fernet encrypt/decrypt using app.state.master_key — never logs plaintext
+│   │   ├── settings_service.py   # Decrypted settings helpers for routers (e.g. get_global_custom_css)
 │   │   ├── ynab_client.py        # YNAB REST client
 │   │   ├── sync_service.py       # YNAB → SQLite pipeline
 │   │   ├── analysis_service.py   # Pure statistical functions
@@ -652,6 +653,8 @@ These are correctness, performance, and hygiene items that carry no architectura
 - **`check_row_duplicates` near-match bug** — Near-match description is overwritten by each successive candidate; the last one wins rather than the most relevant. Fix inner-loop exit logic. (`code-review-summary.md` LOW-4)
 - **MIME magic-byte validation** — Supplement client-reported `content_type` check in the upload handler with a magic-byte prefix check (`%PDF-` for PDFs; UTF-8 decode attempt for CSV/TXT). (`code-review-summary.md` MED-7)
 - **`apply_migrations` comment** — Add a code comment in `database.py` stating that all values in `_new_columns` must be hardcoded string literals — never runtime variables — to prevent a future SQL injection surface. (`code-review-summary.md` HIGH-4 note)
+- **~~Missing sync button on main dashboard~~** — Fixed: sync status bar (with Import + Sync Now buttons) ported to `dashboard_view.html`; `dashboards.py` route passes `last_sync` scoped by active budget.
+- **~~Inconsistent nav bar across pages~~** — Fixed: canonical 5-link nav extracted to `app/templates/partials/nav.html`; all authenticated templates include it; `base.html` default is empty (auth pages remain nav-free); each router passes `current_page` for active-state highlighting.
 
 ---
 

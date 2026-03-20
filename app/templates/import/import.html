@@ -2,6 +2,8 @@
 
 {% block title %}Import Financial Data{% endblock %}
 
+{% block nav %}{% include "partials/nav.html" %}{% endblock %}
+
 {% block extra_head %}
 <style>
   .page-body {
@@ -389,18 +391,6 @@
 
   .btn--danger:hover { background: rgba(255,107,107,0.25); }
 </style>
-{% endblock %}
-
-{% block nav %}
-<nav class="navbar">
-  <span class="navbar__brand">YNAB Financial Report</span>
-  <div class="navbar__links">
-    <a href="/">Dashboard</a>
-    <a href="/reports">Reports</a>
-    <a href="/profile">My Financial Profile</a>
-    <a href="/settings">Settings</a>
-  </div>
-</nav>
 {% endblock %}
 
 {% block content %}

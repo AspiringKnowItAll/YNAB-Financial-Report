@@ -2,6 +2,8 @@
 
 {% block title %}Edit: {{ dashboard.name }} — YNAB Financial Report{% endblock %}
 
+{% block nav %}{% include "partials/nav.html" %}{% endblock %}
+
 {% block extra_head %}
 <link rel="stylesheet" href="/static/css/dashboard.css">
 <link rel="stylesheet" href="/static/js/vendor/gridstack/gridstack.min.css">
@@ -9,18 +11,6 @@
 {% if dashboard.custom_css %}
 <style id="dashboard-custom-css">{{ dashboard.custom_css | safe }}</style>
 {% endif %}
-{% endblock %}
-
-{% block nav %}
-<nav class="navbar">
-  <span class="navbar__brand">YNAB Financial Report</span>
-  <div class="navbar__links">
-    <a href="/" style="color: var(--text);">Dashboard</a>
-    <a href="/reports">Reports</a>
-    <a href="/profile">My Financial Profile</a>
-    <a href="/settings">Settings</a>
-  </div>
-</nav>
 {% endblock %}
 
 {% block content %}

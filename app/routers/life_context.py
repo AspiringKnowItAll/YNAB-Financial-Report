@@ -56,6 +56,7 @@ async def get_profile(request: Request, db: AsyncSession = Depends(get_db)):
         "block_history": block_history,
         "has_active_session": active_session is not None,
         "active_session_id": active_session.id if active_session else None,
+        "current_page": "profile",
     })
 
 

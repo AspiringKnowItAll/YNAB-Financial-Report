@@ -2,6 +2,8 @@
 
 {% block title %}My Financial Profile{% endblock %}
 
+{% block nav %}{% include "partials/nav.html" %}{% endblock %}
+
 {% block extra_head %}
 <style>
   .page-body {
@@ -149,18 +151,6 @@
     margin-bottom: 1.5rem;
   }
 </style>
-{% endblock %}
-
-{% block nav %}
-<nav class="navbar">
-  <span class="navbar__brand">YNAB Financial Report</span>
-  <div class="navbar__links">
-    <a href="/">Dashboard</a>
-    <a href="/reports">Reports</a>
-    <a href="/profile" style="color: var(--text);">My Financial Profile</a>
-    <a href="/settings">Settings</a>
-  </div>
-</nav>
 {% endblock %}
 
 {% block content %}

@@ -19,8 +19,9 @@ from app.models.account import Account
 from app.models.budget import Category, CategoryGroup
 from app.models.dashboard import Dashboard, DashboardWidget
 from app.models.import_data import ExternalAccount
+from app.models.report import SyncLog
 from app.models.settings import AppSettings
-from app.services.encryption import decrypt
+from app.services.settings_service import get_global_custom_css
 from app.templates_config import templates
 
 logger = logging.getLogger(__name__)
@@ -36,20 +37,6 @@ async def _get_all_dashboards(db: AsyncSession) -> list[Dashboard]:
     """Fetch all dashboards ordered by name."""
     result = await db.execute(select(Dashboard).order_by(Dashboard.name))
     return list(result.scalars().all())
-
-
-async def _get_global_custom_css(
-    db: AsyncSession, master_key: bytes | None
-) -> str | None:
-    """Decrypt global custom CSS from AppSettings, or return None."""
-    result = await db.execute(select(AppSettings).where(AppSettings.id == 1))
-    settings = result.scalar_one_or_none()
-    if settings and settings.custom_css_enc and master_key:
-        try:
-            return decrypt(settings.custom_css_enc, master_key)
-        except Exception:
-            logger.warning("Failed to decrypt global custom CSS — skipping")
-    return None
 
 
 # ---------------------------------------------------------------------------
@@ -81,7 +68,7 @@ async def root_redirect(request: Request, db: AsyncSession = Depends(get_db)):
 async def dashboard_list(request: Request, db: AsyncSession = Depends(get_db)):
     """List all dashboards."""
     all_dashboards = await _get_all_dashboards(db)
-    global_custom_css = await _get_global_custom_css(db, request.app.state.master_key)
+    global_custom_css = await get_global_custom_css(db, request.app.state.master_key)
 
     # Count widgets per dashboard in a single query
     wc_result = await db.execute(
@@ -94,6 +81,7 @@ async def dashboard_list(request: Request, db: AsyncSession = Depends(get_db)):
         "all_dashboards": all_dashboards,
         "widget_counts": widget_counts,
         "global_custom_css": global_custom_css,
+        "current_page": "dashboard",
     })
 
 
@@ -101,11 +89,12 @@ async def dashboard_list(request: Request, db: AsyncSession = Depends(get_db)):
 async def dashboard_new(request: Request, db: AsyncSession = Depends(get_db)):
     """Render the create-dashboard form."""
     all_dashboards = await _get_all_dashboards(db)
-    global_custom_css = await _get_global_custom_css(db, request.app.state.master_key)
+    global_custom_css = await get_global_custom_css(db, request.app.state.master_key)
 
     return templates.TemplateResponse(request, "dashboards/dashboard_new.html", {
         "all_dashboards": all_dashboards,
         "global_custom_css": global_custom_css,
+        "current_page": "dashboard",
     })
 
 
@@ -167,7 +156,7 @@ async def dashboard_edit(
     external_accounts = list(result.scalars().all())
 
     all_dashboards = await _get_all_dashboards(db)
-    global_custom_css = await _get_global_custom_css(db, request.app.state.master_key)
+    global_custom_css = await get_global_custom_css(db, request.app.state.master_key)
 
     # Serialize account/category data to JSON for JS consumption
     ynab_accounts_json = json.dumps([
@@ -186,6 +175,7 @@ async def dashboard_edit(
         "ynab_accounts_json": ynab_accounts_json,
         "external_accounts_json": external_accounts_json,
         "categories_json": categories_json,
+        "current_page": "dashboard",
     })
 
 
@@ -213,11 +203,28 @@ async def dashboard_view(
     widgets = list(result.scalars().all())
 
     all_dashboards = await _get_all_dashboards(db)
-    global_custom_css = await _get_global_custom_css(db, request.app.state.master_key)
+    global_custom_css = await get_global_custom_css(db, request.app.state.master_key)
+
+    # Fetch the most recent sync log entry scoped to the active budget
+    last_sync = None
+    settings_result = await db.execute(
+        select(AppSettings).where(AppSettings.id == 1)
+    )
+    app_settings = settings_result.scalar_one_or_none()
+    if app_settings and app_settings.ynab_budget_id:
+        sync_result = await db.execute(
+            select(SyncLog)
+            .where(SyncLog.budget_id == app_settings.ynab_budget_id)
+            .order_by(SyncLog.id.desc())
+            .limit(1)
+        )
+        last_sync = sync_result.scalar_one_or_none()
 
     return templates.TemplateResponse(request, "dashboards/dashboard_view.html", {
         "dashboard": dashboard,
         "widgets": widgets,
         "all_dashboards": all_dashboards,
         "global_custom_css": global_custom_css,
+        "last_sync": last_sync,
+        "current_page": "dashboard",
     })

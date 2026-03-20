@@ -63,6 +63,7 @@ async def list_reports_page(request: Request, db: AsyncSession = Depends(get_db)
         "budget_id": budget_id,
         "reports": reports,
         "ai_configured": bool(settings and settings.ai_provider),
+        "current_page": "reports",
     })
 
 
@@ -127,4 +128,5 @@ async def get_report_page(request: Request, report_id: int, db: AsyncSession = D
         "outliers": outliers,
         "commentary_html": commentary_html,
         "email_configured": email_configured,
+        "current_page": "reports",
     })

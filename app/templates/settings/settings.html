@@ -1,6 +1,8 @@
 {% extends "base.html" %}
 {% block title %}Settings — YNAB Financial Report{% endblock %}
 
+{% block nav %}{% include "partials/nav.html" %}{% endblock %}
+
 {% block extra_head %}
 <style>
   .port-chip {
@@ -29,16 +31,6 @@
     color: var(--text-muted);
   }
 </style>
-{% endblock %}
-
-{% block nav %}
-<nav class="navbar">
-  <span class="navbar__brand">YNAB Financial Report</span>
-  <div class="navbar__links">
-    <a href="/">Dashboard</a>
-    <a href="/settings" style="color: var(--text);">Settings</a>
-  </div>
-</nav>
 {% endblock %}
 
 {% block content %}

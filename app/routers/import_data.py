@@ -40,7 +40,10 @@ async def import_page(request: Request, db: AsyncSession = Depends(get_db)):
     profiles = result.scalars().all()
 
     return templates.TemplateResponse(
-        request, "import/import.html", {"institution_profiles": profiles}
+        request, "import/import.html", {
+            "institution_profiles": profiles,
+            "current_page": "import",
+        }
     )
 
 

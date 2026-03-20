@@ -2,6 +2,8 @@
 
 {% block title %}Report {{ snapshot.month }} — {{ budget_name }}{% endblock %}
 
+{% block nav %}{% include "partials/nav.html" %}{% endblock %}
+
 {% block extra_head %}
 <style>
   .page-body {
@@ -138,18 +140,6 @@
     background: rgba(108,143,255,0.08);
   }
 </style>
-{% endblock %}
-
-{% block nav %}
-<nav class="navbar">
-  <span class="navbar__brand">YNAB Financial Report</span>
-  <div class="navbar__links">
-    <a href="/">Dashboard</a>
-    <a href="/reports">Reports</a>
-    <a href="/settings">Settings</a>
-    <a href="/profile">Profile</a>
-  </div>
-</nav>
 {% endblock %}
 
 {% block content %}
