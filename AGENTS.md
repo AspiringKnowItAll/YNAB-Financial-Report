@@ -90,6 +90,51 @@ This app handles personal financial data. These requirements are mandatory:
 
 ---
 
+## Development Commands
+
+Use these as the default local commands when verifying or exploring the app:
+
+### Run the app locally
+
+```bash
+uvicorn app.main:app --reload --port 8080
+```
+
+### Run with Docker
+
+```bash
+docker-compose up --build
+```
+
+Use the secondary compose file when you need a clean first-run environment without touching the main `/data` volume:
+
+```bash
+docker-compose -f docker-compose.test.yml up --build
+```
+
+### Tests
+
+```bash
+pytest
+pytest tests/unit/
+pytest tests/integration/
+pytest tests/unit/test_analysis_service.py -v
+pytest --cov=app --cov-report=term-missing
+```
+
+### Lint, Format, and Type Check
+
+```bash
+ruff check app/ tests/
+ruff check --fix app/ tests/
+ruff format app/ tests/
+mypy app/
+```
+
+`ruff check` is expected to pass. `mypy app/` is useful, but note that repo-wide pre-existing type-check issues are currently tracked in the Technical Debt section below.
+
+---
+
 ## Architecture
 
 ### Request Flow
@@ -147,7 +192,10 @@ These routes must always be accessible regardless of auth/setup state:
 - `/health`
 - `/first-run` and all sub-paths
 - `/unlock`
+- `/recovery`
 - `/static/`
+
+`/api/*` routes are **not** fully exempt from the auth gate. They still require first-run completion and unlock, but they are exempt from the `settings_complete` redirect so they can return JSON errors instead of HTML 302 responses.
 
 ---
 
@@ -166,9 +214,15 @@ YNAB-Financial-Report/
 │   ├── setup.md
 │   ├── configuration.md
 │   ├── development.md
-│   └── ynab_api_reference.md ← Authoritative YNAB API reference (endpoints, schemas, enums, auth)
+│   ├── phase12_plan.md
+│   ├── phase13_plan.md
+│   ├── phase14_plan.md
+│   ├── ynab_api_reference.md     ← Authoritative YNAB API reference (endpoints, schemas, enums, auth)
+│   ├── YNAB-api-1.json           ← Downloaded OpenAPI source
+│   └── YNAB-api-1.yaml           ← Downloaded OpenAPI source
 ├── requirements.txt
 ├── app/
+│   ├── templates_config.py       # Shared Jinja2Templates instance; filters + autoescape live here
 │   ├── main.py                   # App factory, lifespan, routers, middleware, app.state.master_key
 │   ├── config.py                 # pydantic-settings: PORT, SYNC_DAY_OF_MONTH (no secrets)
 │   ├── database.py               # Async engine, session factory, create_all
@@ -176,6 +230,8 @@ YNAB-Financial-Report/
 │   ├── models/
 │   │   ├── settings.py           # AppSettings ORM (encrypted secrets)
 │   │   ├── life_context.py       # LifeContextSession, LifeContextBlock ORM (Phase 12)
+│   │   ├── import_data.py        # ImportSession, external accounts, external transactions/balances
+│   │   ├── dashboard.py          # Dashboard, DashboardWidget, NetWorthSnapshot
 │   │   ├── budget.py             # Budget, CategoryGroup, Category ORM
 │   │   ├── transaction.py        # Transaction ORM (core fact table)
 │   │   ├── account.py            # Account ORM
@@ -183,6 +239,7 @@ YNAB-Financial-Report/
 │   ├── schemas/
 │   │   ├── auth.py               # Pydantic input validation for master password + recovery code forms
 │   │   ├── settings.py           # Pydantic input validation for settings forms
+│   │   ├── dashboard.py          # Pydantic input validation for dashboard builder APIs
 │   │   ├── ynab.py               # Pydantic models for YNAB API responses
 │   │   └── report.py             # Pydantic models for report data
 │   ├── services/
@@ -193,21 +250,34 @@ YNAB-Financial-Report/
 │   │   ├── sync_service.py       # YNAB → SQLite pipeline
 │   │   ├── analysis_service.py   # Pure statistical functions
 │   │   ├── ai_service.py         # AIProvider protocol + all implementations (generate + stream)
+│   │   ├── import_service.py     # External data import extraction, review flow, persistence
 │   │   ├── life_context_service.py  # Life context chat: sessions, streaming, compression (Phase 12)
 │   │   ├── report_service.py     # Assembles report snapshots
+│   │   ├── widget_service.py     # Dashboard widget data dispatch; DB-only, no HTTP
 │   │   ├── export_service.py     # HTML + PDF rendering
 │   │   ├── email_service.py      # SMTP delivery
 │   │   └── notion_service.py     # Notion sync (optional)
 │   ├── routers/
 │   │   ├── auth.py               # GET/POST /first-run, /unlock, /recovery
-│   │   ├── dashboard.py          # GET /
+│   │   ├── dashboards.py         # Dashboard HTML routes
+│   │   ├── api_dashboards.py     # Dashboard JSON APIs
 │   │   ├── settings.py           # GET/POST /settings
 │   │   ├── reports.py            # GET /reports, /reports/{id}
 │   │   ├── life_context.py       # GET /profile; /api/chat/* endpoints (Phase 12)
+│   │   ├── import_data.py        # Import UI + upload/review/confirm endpoints
 │   │   ├── api.py                # POST /api/sync/trigger, /api/report/generate, /api/report/email/{id}, test endpoints
 │   │   └── export.py             # GET /export/{id}/pdf|html
 │   ├── templates/
+│   │   ├── auth/
+│   │   ├── dashboards/
+│   │   ├── import/
+│   │   ├── life_context/
+│   │   ├── partials/
+│   │   ├── reports/
+│   │   └── settings/
 │   └── static/
+│       ├── css/
+│       └── js/
 ├── data/
 │   └── .gitkeep                  # Volume mount point; runtime files (*.db, master.salt, etc.) are gitignored
 └── tests/
@@ -222,6 +292,17 @@ YNAB-Financial-Report/
 - **Singleton tables** (`app_settings`) always use `id = 1`. Upsert on that ID; never insert a second row.
 - **Soft deletes via `deleted` flag** on YNAB entities (transactions, categories, accounts) — mirror YNAB's own deletion model. Never hard-delete YNAB data rows.
 - **`sync_log`** must always have a row written at the start of a sync (status = "running") and updated at the end (status = "success" or "failed"). Never leave a sync_log row in "running" state permanently.
+- **`ImportSession` lifecycle** must move out of `pending` into `confirmed` or `rejected`. Do not leave abandoned sessions permanently in `pending`.
+
+---
+
+## Service and Template Conventions
+
+- **Shared Jinja2 instance only.** All routers must import the `Jinja2Templates` instance from `app/templates_config.py`. Never create a per-router template instance; that breaks shared filters and autoescape configuration.
+- **`analysis_service.py` is pure.** No DB access, no HTTP calls, no framework objects. Inputs and outputs should stay as plain Python data structures.
+- **Secrets are decrypted in the service layer.** Routers should pass opaque settings objects or validated form data. Decrypt only at the point where a service is about to call an external system.
+- **Logging uses the `logging` module only.** Do not use `print()`. Never log decrypted secret values at any log level.
+- **No Alembic.** New tables belong in `create_all()`. Additive column changes require explicit handling in `apply_migrations()`. Both run only after unlock because the SQLCipher database cannot be opened earlier.
 
 ---
 
@@ -303,6 +384,8 @@ class AIProvider(Protocol):
 
 `stream()` yields tokens one at a time as they arrive from the provider. Used by the Life Context Chat SSE endpoints. `generate()` is used for batch report generation. `vision()` accepts raw PNG image bytes and a text prompt; used by `import_service.extract_via_vision()` for PDF page OCR. All AI SDK imports are confined to `ai_service.py`; no other file may import provider SDKs directly.
 
+`get_ai_provider(settings: AppSettings) -> AIProvider` builds a provider from encrypted persisted settings. `get_ai_provider_from_params(provider_name, api_key, base_url)` builds a provider from plaintext form values and is used by connection-test endpoints that should work before a settings save.
+
 Supported providers and their `ai_provider` setting values:
 
 | Setting value | Provider | Notes |
@@ -311,8 +394,6 @@ Supported providers and their `ai_provider` setting values:
 | `"openai"` | OpenAI SDK | Requires `ai_api_key`; model e.g. `gpt-4o` |
 | `"openrouter"` | OpenAI-compatible | Requires `ai_api_key` + `ai_base_url = https://openrouter.ai/api/v1` |
 | `"ollama"` | OpenAI-compatible | No API key; requires `ai_base_url` e.g. `http://localhost:11434/v1` |
-
-The `get_ai_provider(settings: AppSettings) -> AIProvider` factory in `ai_service.py` reads the active provider from `app_settings` and returns the correct implementation.
 
 ---
 
@@ -362,7 +443,7 @@ These bugs and UX gaps were discovered during the first real end-to-end run of t
 - **Dockerfile**: `libgdk-pixbuf2.0-0` renamed to `libgdk-pixbuf-xlib-2.0-0` in Debian Trixie (python:3.12-slim base image)
 - **Dockerfile**: Internal container port was driven by `$PORT`, causing a mismatch with docker-compose port mapping. Internal port is now hardcoded to `8080`; `PORT` env var only controls the host-side mapping.
 - **docker-compose.yml**: `env_file` now marked `required: false` so the app starts without a `.env` file
-- **Middleware**: `/api/*` routes were being redirected to `/settings` or `/setup` with HTML 302s instead of passing through to return JSON errors. API routes are now exempt from Steps 3 and 4 of the auth gate.
+- **Middleware**: `/api/*` routes were being redirected to `/settings` or `/setup` with HTML 302s instead of passing through to return JSON errors. API routes now bypass the settings-complete redirect so they can return JSON errors instead.
 - **Settings page**: Budget ID was a manual text input requiring the user to copy a UUID from the YNAB URL. Replaced with a dynamic dropdown populated by clicking "Test connection". Budget name is stored in `app_settings.ynab_budget_name` (new column, migration included).
 - **Settings router**: Saving settings failed when the YNAB API key field was blank (user not re-entering existing key) because the Pydantic schema required it. API key and budget ID/name are now saved independently.
 - **Settings router**: `MissingGreenlet` error after a form validation failure — ORM object was expired after `db.rollback()` and lazily loaded in a sync Jinja2 context. Fixed by re-fetching settings after rollback.
