@@ -162,17 +162,20 @@ async def apply_migrations() -> None:
         for table, col, definition in _new_columns:
             try:
                 await conn.execute(text(f"ALTER TABLE {table} ADD COLUMN {col} {definition}"))
-            except Exception:
-                pass  # Column already exists — ignore
+                logger.debug("Migration: added column %s.%s", table, col)
+            except Exception as exc:
+                logger.warning("Migration: skipping %s.%s — %s: %s", table, col, type(exc).__name__, exc)
 
         # Phase 12: drop the user_profile table (replaced by life context chat)
         try:
             await conn.execute(text("DROP TABLE IF EXISTS user_profile"))
         except Exception:
             pass
+    logger.warning("Migration Block 1 complete")
 
     # Block 2: CREATE TABLE IF NOT EXISTS + seeding (fresh connection so prior
     # caught exceptions in Block 1 cannot contaminate this transaction).
+    logger.warning("Migration Block 2 starting")
     async with engine.begin() as conn:
         # Phase 14: create dashboard tables if not yet present, then seed default
         await conn.execute(text("""
