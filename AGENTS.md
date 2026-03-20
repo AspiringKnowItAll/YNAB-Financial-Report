@@ -457,7 +457,7 @@ Deferred to Phase 13. The `list_models()` return type change and `/api/show` cap
 
 None. All planned milestones are complete. Dashboard visual integration with external accounts is deferred to Phase 14.
 
-A three-reviewer code audit (Codex, Gemini, Claude) was completed on 2026-03-17. Findings are catalogued in `code-review-summary.md`. All critical, high, and medium findings are addressed in Phase 13.5. Low/informational findings are tracked in the Deferred Features section.
+A two-reviewer code audit (Codex, Claude) was completed on 2026-03-17. Findings are catalogued in `code-review-summary.md`. All critical, high, and medium findings are addressed in Phase 13.5. Low/informational findings are tracked in the Deferred Features section.
 
 ---
 
@@ -514,7 +514,7 @@ See the Phase 13 section above for a full list of changed files.
 
 #### Milestone 1 — Architectural Fix (prerequisite for Phase 14)
 
-- **`app/services/import_service.py` + `app/services/ai_service.py`** — Add a `vision(image_bytes: bytes, prompt: str) -> str` method to the `AIProvider` protocol and all provider implementations (`AnthropicProvider`, `OpenAIProvider`). Refactor `extract_via_vision()` in `import_service.py` to call `provider.vision()` instead of importing provider SDKs directly. This resolves the architecture rule violation identified by both Gemini and Claude.
+- **`app/services/import_service.py` + `app/services/ai_service.py`** — Add a `vision(image_bytes: bytes, prompt: str) -> str` method to the `AIProvider` protocol and all provider implementations (`AnthropicProvider`, `OpenAIProvider`). Refactor `extract_via_vision()` in `import_service.py` to call `provider.vision()` instead of importing provider SDKs directly. This resolves the architecture rule violation identified by Claude.
 
 #### Milestone 2 — Critical & High Security Fixes
 

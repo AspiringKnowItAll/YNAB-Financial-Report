@@ -1,41 +1,40 @@
 # Code Review Summary — YNAB Financial Report
 
 **Date:** 2026-03-17
-**Reviews ingested:** code-review-by-codex.md, code-review-by-gemini.md, code-review-by-claude.md
-**Reviewers:** OpenAI Codex, Google Gemini CLI, Claude Sonnet 4.6
+**Reviews ingested:** code-review-by-codex.md, code-review-by-claude.md
+**Reviewers:** OpenAI Codex, Claude Sonnet 4.6
 
 ---
 
 ## Overall Assessment
 
-All three reviewers agreed on the fundamental quality of the codebase. Gemini gave it an **A+** and described it as "a benchmark for how to build secure, privacy-focused personal finance tools." Codex and Claude echoed this, noting a well-executed threat model, defense-in-depth encryption, no SQL injection, no plaintext secret storage, and thorough Pydantic validation at every boundary. The findings below are improvements to an already strong codebase — none of the reviewers found any fundamental design failure.
+Both reviewers agreed on the fundamental quality of the codebase. Codex and Claude noted a well-executed threat model, defense-in-depth encryption, no SQL injection, no plaintext secret storage, and thorough Pydantic validation at every boundary. The findings below are improvements to an already strong codebase — neither reviewer found any fundamental design failure.
 
 ---
 
 ## Finding Agreement Matrix
 
-| Finding | Codex | Gemini | Claude | Consensus Severity |
-|---|---|---|---|---|
-| SSE exception messages leak to clients | HIGH | — | HIGH-5 | **High** |
-| Month parameter validation too weak | Medium | — | MED-2 | **Medium** |
-| N+1 queries in import/report service | Low | — | HIGH-2 | **High** (Claude) / Low (Codex) |
-| Vision service imports AI SDKs directly | — | Rec 4.2 | File note | **Architectural** |
-| Auth gate queries DB on every request | — | Rec 4.1 | — | **Low / Perf** |
-| SQLCipher silent plaintext fallback | Medium | — | — | **Medium** |
-| Dead `/setup` nav link | Medium | — | — | **Medium** |
-| Boolean string parsing in settings | Low | — | — | **Low** |
-| Recovery code TOCTOU race condition | — | — | CRIT-1 | **Critical** (unique) |
-| AI-returned data not validated before DB insert | — | — | HIGH-1 | **High** (unique) |
-| `asyncio.get_event_loop()` in export_service | — | — | HIGH-3 | **High** (unique) |
-| Docker container runs as root | — | — | MED-8 | **Medium** (unique) |
-| Prompt injection via `[DATA_UPDATE]` sentinel | — | — | MED-6 | **Medium** (unique) |
-| Content-Disposition filename not sanitized | — | — | MED-5 | **Medium** (unique) |
-| Recovery keys file write not atomic | — | — | LOW-2 | **Low** (unique) |
-| Unpinned dependency versions | — | — | LOW-6 | **Low** (unique) |
-| SMTP logic duplicated in api.py | — | — | LOW-4 | **Low** (unique) |
-| Dashboard loads all transactions into memory | — | — | LOW-10 | **Low** (unique) |
-| Milliunit filter sign formatting | — | — | LOW-1 | **Low** (unique) |
-| Manual migrations (Alembic consideration) | — | Rec 4.3 | LOW-7 | **Informational** |
+| Finding | Codex | Claude | Consensus Severity |
+|---|---|---|---|
+| SSE exception messages leak to clients | HIGH | HIGH-5 | **High** |
+| Month parameter validation too weak | Medium | MED-2 | **Medium** |
+| N+1 queries in import/report service | Low | HIGH-2 | **High** (Claude) / Low (Codex) |
+| Vision service imports AI SDKs directly | — | File note | **Architectural** |
+| SQLCipher silent plaintext fallback | Medium | — | **Medium** |
+| Dead `/setup` nav link | Medium | — | **Medium** |
+| Boolean string parsing in settings | Low | — | **Low** |
+| Recovery code TOCTOU race condition | — | CRIT-1 | **Critical** (unique) |
+| AI-returned data not validated before DB insert | — | HIGH-1 | **High** (unique) |
+| `asyncio.get_event_loop()` in export_service | — | HIGH-3 | **High** (unique) |
+| Docker container runs as root | — | MED-8 | **Medium** (unique) |
+| Prompt injection via `[DATA_UPDATE]` sentinel | — | MED-6 | **Medium** (unique) |
+| Content-Disposition filename not sanitized | — | MED-5 | **Medium** (unique) |
+| Recovery keys file write not atomic | — | LOW-2 | **Low** (unique) |
+| Unpinned dependency versions | — | LOW-6 | **Low** (unique) |
+| SMTP logic duplicated in api.py | — | LOW-4 | **Low** (unique) |
+| Dashboard loads all transactions into memory | — | LOW-10 | **Low** (unique) |
+| Milliunit filter sign formatting | — | LOW-1 | **Low** (unique) |
+| Manual migrations (Alembic consideration) | — | LOW-7 | **Informational** |
 
 ---
 
@@ -249,18 +248,8 @@ No `LIMIT` clause — all non-deleted, approved transactions for the entire budg
 
 ---
 
-### LOW-8: Auth Gate Queries Database on Every Request
-**Source:** Gemini only
-**File:** `app/main.py` (auth_gate middleware)
-
-The middleware queries `AppSettings` on every request to check `settings_complete`. After the app is unlocked and confirmed, this is a redundant round-trip per request.
-
-**Fix:** Once unlocked and settings verified, set a boolean flag in `app.state` and skip the DB query on subsequent requests. Invalidate the flag when settings are saved.
-
----
-
-### LOW-9: Vision Service Imports AI SDKs Directly
-**Source:** Gemini (Rec 4.2), Claude (file note) — **confirmed by two reviewers**
+### LOW-8: Vision Service Imports AI SDKs Directly
+**Source:** Claude (file note)
 **File:** `app/services/import_service.py` lines 225–335
 
 `extract_via_vision` imports `anthropic.AsyncAnthropic` and `openai.AsyncOpenAI` directly. This violates the architecture rule that all AI SDK imports must be confined to `ai_service.py`. The code acknowledges this with a comment.
@@ -280,9 +269,9 @@ Negative milliunits are formatted as `$-1,234.56` rather than the conventional `
 ---
 
 ### Informational: Manual Migration System
-**Source:** Gemini (Rec 4.3), Claude (LOW-7)
+**Source:** Claude (LOW-7)
 
-The `apply_migrations` function in `database.py` uses raw `ALTER TABLE` SQL strings. Both reviewers noted this is appropriate for the current scope and "zero-config" deployment goal. Gemini suggested considering Alembic if schema complexity grows significantly.
+The `apply_migrations` function in `database.py` uses raw `ALTER TABLE` SQL strings. This is appropriate for the current scope and "zero-config" deployment goal. Consider Alembic if schema complexity grows significantly.
 
 **No action needed now.** Add a comment documenting that the system is SQLite-specific and cannot be ported to other backends without changes.
 
@@ -334,9 +323,8 @@ The `apply_migrations` function in `database.py` uses raw `ALTER TABLE` SQL stri
 | 14 | Pin dependency versions for reproducible builds | Claude | `requirements.txt` |
 | 15 | Limit dashboard transaction query to last 24 months | Claude | `dashboard.py` |
 | 16 | Fix deprecated `get_event_loop()` in auth tests | Claude | `test_auth_service.py` |
-| 17 | Refactor `extract_via_vision` into `AIProvider` protocol | Gemini + Claude | `import_service.py`, `ai_service.py` |
-| 18 | Auth gate: cache settings_complete in `app.state` | Gemini | `main.py` |
-| 19 | Standardize boolean form field parsing | Codex | `routers/settings.py` |
-| 20 | Fix near-match logic bug in `check_row_duplicates` | Claude | `import_service.py` |
-| 21 | Fix `milliunit_to_dollars` negative sign placement | Claude | `templates_config.py` |
-| 22 | Sanitize `Content-Disposition` filenames | Claude | `export.py`, `import_data.py` |
+| 17 | Refactor `extract_via_vision` into `AIProvider` protocol | Claude | `import_service.py`, `ai_service.py` |
+| 18 | Standardize boolean form field parsing | Codex | `routers/settings.py` |
+| 19 | Fix near-match logic bug in `check_row_duplicates` | Claude | `import_service.py` |
+| 20 | Fix `milliunit_to_dollars` negative sign placement | Claude | `templates_config.py` |
+| 21 | Sanitize `Content-Disposition` filenames | Claude | `export.py`, `import_data.py` |
