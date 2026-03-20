@@ -585,3 +585,180 @@
   height: 100%;
   min-height: 200px;
 }
+
+/* ── Widget table/list body (M4) ───────────────────── */
+
+.widget-body--table {
+  padding: 0;
+  display: block;
+  overflow: hidden;
+  align-items: stretch;
+}
+
+/* ── Category stats table (M4) ─────────────────────── */
+
+.widget-stats-table-wrap {
+  width: 100%;
+  max-height: 300px;
+  overflow-y: auto;
+}
+
+.widget-stats-table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 0.82rem;
+}
+
+.widget-stats-table thead {
+  position: sticky;
+  top: 0;
+  z-index: 1;
+}
+
+.widget-stats-table th {
+  background: #1a1d27;
+  color: #e2e4ef;
+  font-weight: 600;
+  text-align: left;
+  padding: 6px 8px;
+  border-bottom: 1px solid var(--border);
+  white-space: nowrap;
+}
+
+.widget-stats-table td {
+  color: #e2e4ef;
+  padding: 6px 8px;
+  border-bottom: 1px solid rgba(46, 49, 71, 0.4);
+  white-space: nowrap;
+}
+
+.widget-stats-table tbody tr:nth-child(odd) {
+  background: #0f1117;
+}
+
+.widget-stats-table tbody tr:nth-child(even) {
+  background: transparent;
+}
+
+.widget-stats-table tbody tr:hover {
+  background: rgba(108, 143, 255, 0.06);
+}
+
+/* ── Account balances list (M4) ────────────────────── */
+
+.widget-accounts-list {
+  width: 100%;
+  max-height: 300px;
+  overflow-y: auto;
+  font-size: 0.9rem;
+}
+
+.widget-accounts-list__row {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 6px 12px;
+}
+
+.widget-accounts-list__row:nth-child(odd) {
+  background: #0f1117;
+}
+
+.widget-accounts-list__row:nth-child(even) {
+  background: transparent;
+}
+
+.widget-accounts-list__name {
+  color: #e2e4ef;
+  display: flex;
+  align-items: center;
+  gap: 0.4rem;
+}
+
+.widget-accounts-list__type {
+  font-size: 0.72rem;
+  color: var(--muted);
+}
+
+.widget-accounts-list__balance {
+  color: #e2e4ef;
+  font-weight: 600;
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
+}
+
+.widget-accounts-list__total {
+  border-top: 1px solid var(--border);
+  font-weight: 700;
+  background: rgba(108, 143, 255, 0.04) !important;
+}
+
+.widget-accounts-list__total .widget-accounts-list__name {
+  color: #f0f1f7;
+}
+
+.widget-accounts-list__total .widget-accounts-list__balance {
+  color: #f0f1f7;
+}
+
+/* ── Recent transactions list (M4) ─────────────────── */
+
+.widget-transactions-list-wrap {
+  width: 100%;
+  max-height: 300px;
+  overflow-y: auto;
+}
+
+.widget-transactions-list {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 0.82rem;
+}
+
+.widget-transactions-list thead {
+  position: sticky;
+  top: 0;
+  z-index: 1;
+}
+
+.widget-transactions-list th {
+  background: #1a1d27;
+  color: #e2e4ef;
+  font-weight: 600;
+  text-align: left;
+  padding: 6px 8px;
+  border-bottom: 1px solid var(--border);
+  white-space: nowrap;
+}
+
+.widget-transactions-list td {
+  color: #e2e4ef;
+  padding: 6px 8px;
+  border-bottom: 1px solid rgba(46, 49, 71, 0.4);
+}
+
+.widget-transactions-list tbody tr:nth-child(odd) {
+  background: #0f1117;
+}
+
+.widget-transactions-list tbody tr:nth-child(even) {
+  background: transparent;
+}
+
+.widget-transactions-list tbody tr:hover {
+  background: rgba(108, 143, 255, 0.06);
+}
+
+.txn-col-amount {
+  text-align: right;
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
+}
+
+.txn-amount--positive {
+  color: #4caf82;
+}
+
+.txn-amount--negative {
+  color: #ff6b6b;
+}

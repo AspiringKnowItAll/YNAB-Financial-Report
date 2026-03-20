@@ -348,7 +348,7 @@ Outlier exclusions must be stored in `report_snapshots.outliers_excluded` (JSON 
 | 12.5 — Database Encryption | Complete | SQLCipher whole-database encryption (AES-256); one-time plaintext→encrypted migration; lazy DB init after unlock |
 | 13 — External Data Import | Complete | Upload PDF/CSV financial documents; AI normalizes to transaction records or balance snapshots; user reviews + corrects via chat; confirms before saving; external accounts and transactions included in AI report prompt |
 | 13.5 — Security Hardening | Complete | All critical/high/medium findings from the 2026-03-17 code audit addressed: vision AIProvider abstraction, TOCTOU lock, Pydantic row validation, get_running_loop fix, SSE error redaction, month validation, non-root Docker user, SQLCipher fail-fast, atomic recovery key write, boolean form parsing. |
-| 14 — Dashboard Redesign | In Progress — M3 complete, M4 next | Multi-dashboard builder: named dashboards, left dock, WYSIWYG gridstack.js editor, configurable column grid, per-widget filters (time period, accounts, categories), 17 widget types, per-dashboard + global custom CSS, net worth snapshots, projection widgets. Spec: docs/phase14_plan.md |
+| 14 — Dashboard Redesign | In Progress — M4 complete, M5 next | Multi-dashboard builder: named dashboards, left dock, WYSIWYG gridstack.js editor, configurable column grid, per-widget filters (time period, accounts, categories), 17 widget types, per-dashboard + global custom CSS, net worth snapshots, projection widgets. Spec: docs/phase14_plan.md |
 
 ---
 
@@ -578,7 +578,7 @@ See the Phase 13 section above for a full list of changed files.
 - `app/templates/settings/settings.html` — Appearance section (M6) + Financial Projections section (M5)
 - `app/routers/settings.py` — handle new AppSettings fields
 
-**Milestones:** M1 Foundation ✓ → M2 Builder (gridstack) ✓ → M3 Existing Widgets ✓ → M4 New Widgets → M5 Projections → M6 Global CSS → M7 Reports Integration (TBD)
+**Milestones:** M1 Foundation ✓ → M2 Builder (gridstack) ✓ → M3 Existing Widgets ✓ → M4 New Widgets ✓ → M5 Projections → M6 Global CSS → M7 Reports Integration (TBD)
 
 ### Milestone 3 — Widget Library: Existing Widgets ✓ Complete
 
@@ -601,6 +601,30 @@ See the Phase 13 section above for a full list of changed files.
 | `category_breakdown` | Chart (Plotly) | Horizontal bar overlay: this-month spending vs. IQR-adjusted monthly average |
 
 **gridstack.js attribution:** MIT license. Copyright (c) 2021-present Alain Dumesny, Dylan Weiss, Lyor Goldstein. Copyright notice must be preserved in `app/static/js/vendor/gridstack/gridstack.all.js` header. No UI attribution required.
+
+---
+
+### Milestone 4 — Widget Library: New Widgets ✓ Complete
+
+**What Changed:**
+
+- **`app/services/widget_service.py`** — Added 9 new widget type builders and updated the main dispatcher. Also added new DB loaders (`_load_accounts`, `_load_account_name_map`, `_load_net_worth_snapshots`, `_load_external_accounts_with_balances`, `_load_external_balances_in_range`) and helper functions (`_parse_account_ids`, `_parse_excluded_category_ids`). Added `payee_name` to the dict returned by `_load_transactions`. Key correctness fixes: `ytd` time period now handles January correctly (falls back to `today` as end date when no complete month exists); `_load_external_balances_in_range` deliberately omits a lower-bound date filter so external balances recorded before the widget period are available for the "latest on or before" net worth trend lookup.
+- **`app/static/js/dashboard_view.js`** — Added renderers for all 9 new widget types: `renderSavingsRateCard` (% formatting), `renderCategoryStatsTable`, `renderAccountBalancesList`, `renderRecentTransactions`. Updated `renderWidget` dispatch to route all 15 widget types.
+- **`app/static/css/dashboard.css`** — Appended M4 styles: `.widget-body--table`, `.widget-stats-table` + wrap (category stats), `.widget-accounts-list` (account balances), `.widget-transactions-list` + wrap (recent transactions), `.txn-amount--positive/negative`, `.txn-col-amount`.
+
+**Implemented widget types (M4):**
+
+| Type | Kind | Description |
+|---|---|---|
+| `savings_rate_card` | Card | Savings rate % (income − spending) / income for the period |
+| `net_worth_trend` | Chart (Plotly) | Net worth over time: YNAB `NetWorthSnapshot` + `ExternalBalance` history combined |
+| `savings_rate_trend` | Chart (Plotly) | Savings rate % per calendar month line chart |
+| `group_rollup` | Chart (Plotly) | Spending by category group; bar (default) or donut via `chart_type` config |
+| `payee_breakdown` | Chart (Plotly) | Top N spending payees horizontal bar chart; N configurable via `top_n` (1–30) |
+| `month_over_month` | Chart (Plotly) | Grouped bar chart: income + spending per month, with net savings dotted line overlay |
+| `category_stats_table` | Table (HTML) | Per-category avg / min / max / peak month / months-with-data |
+| `account_balances_list` | List (HTML) | YNAB accounts + external accounts with current balances; grand total row |
+| `recent_transactions` | Table (HTML) | Most recent N transactions (date-desc); N configurable via `limit` (5–100) |
 
 ---
 

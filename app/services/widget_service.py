@@ -1,5 +1,5 @@
 """
-Widget data service — Phase 14, Milestone 3.
+Widget data service — Phase 14, Milestones 3 & 4.
 
 Dispatches widget data queries based on widget_type and applies the widget's
 config_json filters (time period, account scope, category exclusions).
@@ -12,6 +12,7 @@ This service reads only from the database — no external HTTP calls.
 
 import json
 import logging
+from collections import defaultdict
 from datetime import date, timedelta
 
 from sqlalchemy import select
@@ -19,7 +20,8 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.models.account import Account
 from app.models.budget import Category, CategoryGroup
-from app.models.dashboard import DashboardWidget
+from app.models.dashboard import DashboardWidget, NetWorthSnapshot
+from app.models.import_data import ExternalAccount, ExternalBalance
 from app.models.settings import AppSettings
 from app.models.transaction import Transaction
 from app.services import analysis_service
@@ -52,6 +54,13 @@ _AXIS_STYLE: dict = {
     "linecolor": "#2e3147",
     "zerolinecolor": "#2e3147",
 }
+
+# Colour palette for multi-series charts (group_rollup donut, etc.)
+_COLOR_PALETTE: list[str] = [
+    "#6c8fff", "#4caf82", "#ff6b6b", "#ffb347", "#a78bfa",
+    "#f472b6", "#38bdf8", "#fbbf24", "#34d399", "#f87171",
+    "#818cf8", "#fb923c",
+]
 
 
 # ---------------------------------------------------------------------------
@@ -90,12 +99,16 @@ def _resolve_date_range(
     if time_period == "all_time":
         return "2000-01-01", today.isoformat()
 
-    # ytd ends at the last day of the previous complete month to be consistent
-    # with last_N_months (which also excludes the partial current month).
+    # ytd ends at the last day of the previous complete month.
+    # Exception: in January no complete month exists yet, so it falls back to
+    # today (current partial month) to avoid an inverted date range.
     if time_period == "ytd":
+        start_ytd = date(today.year, 1, 1)
         first_of_this = today.replace(day=1)
         end_ytd = first_of_this - timedelta(days=1)
-        start_ytd = date(today.year, 1, 1)
+        # If no complete month exists yet (January), include the current partial month
+        if end_ytd < start_ytd:
+            end_ytd = today
         return start_ytd.isoformat(), end_ytd.isoformat()
 
     if time_period == "last_month":
@@ -133,7 +146,7 @@ def _resolve_date_range(
 
 
 def _format_period_label(start_date: str, end_date: str) -> str:
-    """Return a human-readable period label, e.g. 'Mar 2025 – Feb 2026'."""
+    """Return a human-readable period label, e.g. 'Mar 2025 -- Feb 2026'."""
     try:
         s = date.fromisoformat(start_date)
         e = date.fromisoformat(end_date)
@@ -151,7 +164,7 @@ def _months_in_range(start_date: str, end_date: str) -> list[str]:
         e = date.fromisoformat(end_date)
     except ValueError:
         return []
-    result = []
+    result: list[str] = []
     year, month = s.year, s.month
     while (year, month) <= (e.year, e.month):
         result.append(f"{year:04d}-{month:02d}")
@@ -195,6 +208,24 @@ def _widget_title(widget_type: str, config: dict) -> str:
     return widget_type.replace("_", " ").title()
 
 
+def _parse_account_ids(config: dict) -> list[str] | None:
+    """Extract and validate included_account_ids from config."""
+    raw = config.get("included_account_ids")
+    if isinstance(raw, list) and raw:
+        ids = [str(x) for x in raw if isinstance(x, str) and x]
+        return ids if ids else None
+    return None
+
+
+def _parse_excluded_category_ids(config: dict) -> list[str] | None:
+    """Extract and validate excluded_category_ids from config."""
+    raw = config.get("excluded_category_ids")
+    if isinstance(raw, list) and raw:
+        ids = [str(x) for x in raw if isinstance(x, str) and x]
+        return ids if ids else None
+    return None
+
+
 # ---------------------------------------------------------------------------
 # Database loaders
 # ---------------------------------------------------------------------------
@@ -230,6 +261,7 @@ async def _load_transactions(
             "amount": t.amount,
             "category_id": t.category_id,
             "account_id": t.account_id,
+            "payee_name": t.payee_name,
         }
         for t in result.scalars().all()
     ]
@@ -277,6 +309,125 @@ async def _load_net_worth(db: AsyncSession, budget_id: str) -> int:
         )
     )
     return sum(a.balance or 0 for a in result.scalars().all())
+
+
+async def _load_accounts(
+    db: AsyncSession,
+    budget_id: str,
+    account_ids: list[str] | None = None,
+) -> list[Account]:
+    """Load non-deleted, non-closed YNAB accounts, optionally filtered by IDs."""
+    query = select(Account).where(
+        Account.budget_id == budget_id,
+        Account.deleted.is_(False),
+        Account.closed.is_(False),
+    )
+    if account_ids:
+        query = query.where(Account.id.in_(account_ids))
+    result = await db.execute(query)
+    return list(result.scalars().all())
+
+
+async def _load_account_name_map(db: AsyncSession, budget_id: str) -> dict[str, str]:
+    """Return {account_id: account_name} for all non-deleted accounts."""
+    result = await db.execute(
+        select(Account.id, Account.name).where(
+            Account.budget_id == budget_id,
+            Account.deleted.is_(False),
+        )
+    )
+    return {row.id: row.name for row in result.all()}
+
+
+async def _load_net_worth_snapshots(
+    db: AsyncSession,
+    budget_id: str,
+    start_date: str,
+    end_date: str,
+) -> list[NetWorthSnapshot]:
+    """Load NetWorthSnapshot rows for the budget within the date range, ordered ascending."""
+    result = await db.execute(
+        select(NetWorthSnapshot)
+        .where(
+            NetWorthSnapshot.budget_id == budget_id,
+            NetWorthSnapshot.snapped_at >= start_date,
+            NetWorthSnapshot.snapped_at <= end_date,
+        )
+        .order_by(NetWorthSnapshot.snapped_at.asc())
+    )
+    return list(result.scalars().all())
+
+
+async def _load_external_accounts_with_balances(
+    db: AsyncSession,
+) -> list[dict]:
+    """
+    Load all active external accounts with their most recent balance.
+
+    Returns list of dicts: {id, name, institution, account_type, latest_balance, latest_date}
+    """
+    result = await db.execute(
+        select(ExternalAccount).where(ExternalAccount.is_active.is_(True))
+    )
+    ext_accounts = list(result.scalars().all())
+
+    accounts_with_balances: list[dict] = []
+    for ea in ext_accounts:
+        bal_result = await db.execute(
+            select(ExternalBalance)
+            .where(ExternalBalance.external_account_id == ea.id)
+            .order_by(ExternalBalance.as_of_date.desc())
+            .limit(1)
+        )
+        latest_bal = bal_result.scalar_one_or_none()
+        accounts_with_balances.append({
+            "id": ea.id,
+            "name": ea.name,
+            "institution": ea.institution,
+            "account_type": ea.account_type,
+            "latest_balance": latest_bal.balance_milliunits if latest_bal else 0,
+            "latest_date": latest_bal.as_of_date if latest_bal else None,
+        })
+
+    return accounts_with_balances
+
+
+async def _load_external_balances_in_range(
+    db: AsyncSession,
+    end_date: str,
+) -> dict[int, list[dict]]:
+    """
+    Load external balance snapshots up to end_date, grouped by account.
+
+    Returns: {external_account_id: [{as_of_date, balance_milliunits}, ...]}
+    sorted ascending by date per account.
+
+    Lower bound deliberately omitted: balances recorded before the widget
+    period must still be available for the "latest on or before" snapshot
+    lookup used by net_worth_trend.
+    """
+    active_result = await db.execute(
+        select(ExternalAccount.id).where(ExternalAccount.is_active.is_(True))
+    )
+    active_ids = [row.id for row in active_result.all()]
+    if not active_ids:
+        return {}
+
+    bal_result = await db.execute(
+        select(ExternalBalance)
+        .where(
+            ExternalBalance.external_account_id.in_(active_ids),
+            ExternalBalance.as_of_date <= end_date,
+        )
+        .order_by(ExternalBalance.as_of_date.asc())
+    )
+    grouped: dict[int, list[dict]] = defaultdict(list)
+    for bal in bal_result.scalars().all():
+        grouped[bal.external_account_id].append({
+            "as_of_date": bal.as_of_date,
+            "balance_milliunits": bal.balance_milliunits,
+        })
+    return grouped
 
 
 # ---------------------------------------------------------------------------
@@ -346,6 +497,30 @@ def _net_worth_card(net_worth: int, title: str) -> dict:
         "label": "Net Worth",
         "value": net_worth,
         "period": "Current",
+    }
+
+
+def _savings_rate_card(
+    transactions: list[dict], period_label: str, title: str
+) -> dict:
+    """Return savings rate as a percentage (float, NOT milliunits)."""
+    income = sum(
+        t["amount"]
+        for t in transactions
+        if t["amount"] > 0 and t["category_id"] is not None
+    )
+    spending = sum(
+        abs(t["amount"])
+        for t in transactions
+        if t["amount"] < 0 and t["category_id"] is not None
+    )
+    savings_rate = ((income - spending) / income * 100) if income > 0 else 0.0
+    return {
+        "widget_type": "savings_rate_card",
+        "title": title,
+        "label": "Savings Rate",
+        "value": round(savings_rate, 1),
+        "period": period_label,
     }
 
 
@@ -476,7 +651,7 @@ def _category_breakdown(
         avg = avg_by_id.get(cs["category_id"])
         cs["average_amount"] = avg["average_amount"] if avg else 0
 
-    # Build chart — top 15 categories, displayed bottom-to-top
+    # Build chart -- top 15 categories, displayed bottom-to-top
     top_cats = cat_spend[:15]
     display_cats = list(reversed(top_cats))
     chart_height = max(250, len(display_cats) * 34 + 60)
@@ -527,6 +702,521 @@ def _category_breakdown(
     }
 
 
+def _net_worth_trend(
+    snapshots: list[NetWorthSnapshot],
+    ext_balances_by_account: dict[int, list[dict]],
+    period_label: str,
+    title: str,
+) -> dict:
+    """Return Plotly line chart for net worth over time (YNAB + external)."""
+    if not snapshots:
+        return {
+            "widget_type": "net_worth_trend",
+            "title": title,
+            "period": period_label,
+            "empty": True,
+            "plotly": None,
+        }
+
+    # Build a lookup: for each external account, all balances sorted by date
+    # We'll use the latest balance on or before each YNAB snapshot date.
+    dates: list[str] = []
+    values: list[float] = []
+
+    for snap in snapshots:
+        snap_date = snap.snapped_at
+        ynab_balance = snap.ynab_balance_milliunits
+
+        # Sum external balances: for each account, latest balance on or before snap_date
+        ext_total = 0
+        for _acct_id, balances in ext_balances_by_account.items():
+            latest_for_date: int | None = None
+            for bal in balances:
+                if bal["as_of_date"] <= snap_date:
+                    latest_for_date = bal["balance_milliunits"]
+                else:
+                    break
+            if latest_for_date is not None:
+                ext_total += latest_for_date
+
+        dates.append(snap_date)
+        values.append(_milliunit_to_float(ynab_balance + ext_total))
+
+    figure = {
+        "data": [
+            {
+                "type": "scatter",
+                "mode": "lines+markers",
+                "name": "Net Worth",
+                "x": dates,
+                "y": values,
+                "line": {"color": "#6c8fff", "width": 2},
+                "marker": {"size": 5, "color": "#6c8fff"},
+                "hovertemplate": "%{x}<br>Net Worth: $%{y:,.2f}<extra></extra>",
+                "fill": "tozeroy",
+                "fillcolor": "rgba(108, 143, 255, 0.1)",
+            },
+        ],
+        "layout": {
+            **_PLOTLY_BASE_LAYOUT,
+            "height": 280,
+            "margin": {"t": 10, "b": 50, "l": 80, "r": 10},
+            "xaxis": {**_AXIS_STYLE},
+            "yaxis": {**_AXIS_STYLE, "tickprefix": "$", "tickformat": ",.0f"},
+        },
+    }
+
+    result: dict = {
+        "widget_type": "net_worth_trend",
+        "title": title,
+        "period": period_label,
+        "plotly": figure,
+    }
+
+    if len(snapshots) < 3:
+        result["note"] = "YNAB history starts from first sync after Phase 14 deployment"
+
+    return result
+
+
+def _savings_rate_trend(
+    transactions: list[dict],
+    start_date: str,
+    end_date: str,
+    period_label: str,
+    title: str,
+) -> dict:
+    """Return Plotly line chart for savings rate % per month."""
+    months_window = _months_in_range(start_date, end_date)
+    monthly_totals = analysis_service.compute_monthly_totals(transactions, set())
+    totals_by_month = {mt.month: mt for mt in monthly_totals}
+
+    rates: list[float] = []
+    for m in months_window:
+        if m in totals_by_month:
+            mt = totals_by_month[m]
+            if mt.income > 0:
+                rates.append(round((mt.income - mt.spending) / mt.income * 100, 1))
+            else:
+                rates.append(0.0)
+        else:
+            rates.append(0.0)
+
+    figure = {
+        "data": [
+            {
+                "type": "scatter",
+                "mode": "lines+markers",
+                "name": "Savings Rate",
+                "x": months_window,
+                "y": rates,
+                "line": {"color": "#4caf82", "width": 2},
+                "marker": {"size": 5, "color": "#4caf82"},
+                "hovertemplate": "%{x}<br>Savings Rate: %{y:.1f}%<extra></extra>",
+                "fill": "tozeroy",
+                "fillcolor": "rgba(76, 175, 130, 0.1)",
+            },
+        ],
+        "layout": {
+            **_PLOTLY_BASE_LAYOUT,
+            "height": 280,
+            "margin": {"t": 10, "b": 50, "l": 60, "r": 10},
+            "xaxis": {**_AXIS_STYLE},
+            "yaxis": {**_AXIS_STYLE, "ticksuffix": "%", "tickformat": ".0f"},
+        },
+    }
+
+    return {
+        "widget_type": "savings_rate_trend",
+        "title": title,
+        "period": period_label,
+        "plotly": figure,
+    }
+
+
+def _group_rollup(
+    transactions: list[dict],
+    categories: list[dict],
+    period_label: str,
+    title: str,
+    chart_type: str,
+) -> dict:
+    """Return Plotly chart for spending by category group."""
+    cat_map = {c["id"]: c for c in categories}
+
+    # Aggregate spending by group
+    group_totals: dict[str, int] = defaultdict(int)
+    for t in transactions:
+        if t["amount"] >= 0 or t["category_id"] is None:
+            continue
+        cat = cat_map.get(t["category_id"])
+        if cat is None:
+            continue
+        group_totals[cat["group_name"]] += abs(t["amount"])
+
+    if not group_totals:
+        return {
+            "widget_type": "group_rollup",
+            "title": title,
+            "period": period_label,
+            "empty": True,
+            "plotly": None,
+        }
+
+    # Sort descending, take top 12
+    sorted_groups = sorted(group_totals.items(), key=lambda x: x[1], reverse=True)[:12]
+
+    if chart_type == "donut":
+        labels = [g[0] for g in sorted_groups]
+        amounts = [_milliunit_to_float(g[1]) for g in sorted_groups]
+        colors = [_COLOR_PALETTE[i % len(_COLOR_PALETTE)] for i in range(len(sorted_groups))]
+
+        figure = {
+            "data": [
+                {
+                    "type": "pie",
+                    "labels": labels,
+                    "values": amounts,
+                    "hole": 0.4,
+                    "marker": {"colors": colors},
+                    "textinfo": "label+percent",
+                    "textposition": "outside",
+                    "hovertemplate": "%{label}<br>$%{value:,.2f}<br>%{percent}<extra></extra>",
+                },
+            ],
+            "layout": {
+                **_PLOTLY_BASE_LAYOUT,
+                "height": 320,
+                "margin": {"t": 10, "b": 10, "l": 10, "r": 10},
+                "showlegend": False,
+            },
+        }
+    else:
+        # Default: horizontal bar chart (sorted bottom-to-top for display)
+        display_groups = list(reversed(sorted_groups))
+        chart_height = max(250, len(display_groups) * 30 + 60)
+        colors = [
+            _COLOR_PALETTE[i % len(_COLOR_PALETTE)]
+            for i in range(len(display_groups))
+        ]
+
+        figure = {
+            "data": [
+                {
+                    "type": "bar",
+                    "orientation": "h",
+                    "name": "Spending",
+                    "x": [_milliunit_to_float(g[1]) for g in display_groups],
+                    "y": [g[0] for g in display_groups],
+                    "marker": {"color": colors},
+                    "hovertemplate": "%{y}<br>$%{x:,.2f}<extra></extra>",
+                },
+            ],
+            "layout": {
+                **_PLOTLY_BASE_LAYOUT,
+                "height": chart_height,
+                "margin": {"t": 10, "b": 40, "l": 10, "r": 10},
+                "xaxis": {**_AXIS_STYLE, "tickprefix": "$", "tickformat": ",.0f"},
+                "yaxis": {**_AXIS_STYLE, "automargin": True},
+                "showlegend": False,
+            },
+        }
+
+    return {
+        "widget_type": "group_rollup",
+        "title": title,
+        "period": period_label,
+        "plotly": figure,
+    }
+
+
+def _payee_breakdown(
+    transactions: list[dict],
+    period_label: str,
+    title: str,
+    top_n: int,
+) -> dict:
+    """Return Plotly horizontal bar chart for top spending payees."""
+    # Aggregate spending by payee (outflows only, categorized only)
+    payee_totals: dict[str, int] = defaultdict(int)
+    for t in transactions:
+        if t["amount"] >= 0 or t["category_id"] is None:
+            continue
+        payee = t.get("payee_name")
+        if not payee or not isinstance(payee, str) or not payee.strip():
+            continue
+        payee_totals[payee.strip()] += abs(t["amount"])
+
+    if not payee_totals:
+        return {
+            "widget_type": "payee_breakdown",
+            "title": title,
+            "period": period_label,
+            "empty": True,
+            "plotly": None,
+        }
+
+    # Sort descending, take top N
+    sorted_payees = sorted(payee_totals.items(), key=lambda x: x[1], reverse=True)[:top_n]
+    display_payees = list(reversed(sorted_payees))
+    chart_height = max(250, len(display_payees) * 28 + 60)
+
+    figure = {
+        "data": [
+            {
+                "type": "bar",
+                "orientation": "h",
+                "name": "Spending",
+                "x": [_milliunit_to_float(p[1]) for p in display_payees],
+                "y": [p[0] for p in display_payees],
+                "marker": {"color": "#ff6b6b"},
+                "hovertemplate": "%{y}<br>$%{x:,.2f}<extra></extra>",
+            },
+        ],
+        "layout": {
+            **_PLOTLY_BASE_LAYOUT,
+            "height": chart_height,
+            "margin": {"t": 10, "b": 40, "l": 10, "r": 10},
+            "xaxis": {**_AXIS_STYLE, "tickprefix": "$", "tickformat": ",.0f"},
+            "yaxis": {**_AXIS_STYLE, "automargin": True},
+            "showlegend": False,
+        },
+    }
+
+    return {
+        "widget_type": "payee_breakdown",
+        "title": title,
+        "period": period_label,
+        "plotly": figure,
+    }
+
+
+def _month_over_month(
+    transactions: list[dict],
+    start_date: str,
+    end_date: str,
+    period_label: str,
+    title: str,
+) -> dict:
+    """Return Plotly grouped bar chart with income/spending bars + net savings line."""
+    months_window = _months_in_range(start_date, end_date)
+    monthly_totals = analysis_service.compute_monthly_totals(transactions, set())
+    totals_by_month = {mt.month: mt for mt in monthly_totals}
+
+    income_series = [
+        _milliunit_to_float(totals_by_month[m].income) if m in totals_by_month else 0.0
+        for m in months_window
+    ]
+    spending_series = [
+        _milliunit_to_float(totals_by_month[m].spending) if m in totals_by_month else 0.0
+        for m in months_window
+    ]
+    net_series = [
+        _milliunit_to_float(totals_by_month[m].net) if m in totals_by_month else 0.0
+        for m in months_window
+    ]
+
+    figure = {
+        "data": [
+            {
+                "type": "bar",
+                "name": "Income",
+                "x": months_window,
+                "y": income_series,
+                "marker": {"color": "#4caf82"},
+                "hovertemplate": "%{x}<br>Income: $%{y:,.2f}<extra></extra>",
+            },
+            {
+                "type": "bar",
+                "name": "Spending",
+                "x": months_window,
+                "y": spending_series,
+                "marker": {"color": "#ff6b6b"},
+                "hovertemplate": "%{x}<br>Spending: $%{y:,.2f}<extra></extra>",
+            },
+            {
+                "type": "scatter",
+                "mode": "lines+markers",
+                "name": "Net Savings",
+                "x": months_window,
+                "y": net_series,
+                "line": {"color": "#ffb347", "width": 2, "dash": "dot"},
+                "marker": {"size": 5, "color": "#ffb347"},
+                "hovertemplate": "%{x}<br>Net: $%{y:,.2f}<extra></extra>",
+            },
+        ],
+        "layout": {
+            **_PLOTLY_BASE_LAYOUT,
+            "barmode": "group",
+            "height": 300,
+            "margin": {"t": 10, "b": 50, "l": 70, "r": 10},
+            "xaxis": {**_AXIS_STYLE},
+            "yaxis": {**_AXIS_STYLE, "tickprefix": "$", "tickformat": ",.0f"},
+        },
+    }
+
+    return {
+        "widget_type": "month_over_month",
+        "title": title,
+        "period": period_label,
+        "plotly": figure,
+    }
+
+
+def _category_stats_table(
+    transactions: list[dict],
+    categories: list[dict],
+    period_label: str,
+    title: str,
+) -> dict:
+    """
+    Return per-category statistics table data.
+
+    Computes avg (IQR-adjusted), min, max, peak month, and months with data
+    for each category that has spending in the period.
+    """
+    cat_map = {c["id"]: c for c in categories}
+
+    # Build per-category monthly totals: {cat_id: {month: total_milliunit}}
+    cat_monthly: dict[str, dict[str, int]] = defaultdict(lambda: defaultdict(int))
+    for t in transactions:
+        if t["category_id"] is None or t["amount"] >= 0:
+            continue
+        cat_monthly[t["category_id"]][t["date"][:7]] += abs(t["amount"])
+
+    # Get IQR-adjusted averages from analysis_service
+    cat_averages = analysis_service.compute_category_averages(transactions, categories)
+    avg_by_id = {a["category_id"]: a for a in cat_averages}
+
+    rows: list[dict] = []
+    for cat_id, monthly in cat_monthly.items():
+        cat = cat_map.get(cat_id)
+        if cat is None:
+            continue
+
+        monthly_amounts = list(monthly.values())
+        months_with_data = len(monthly_amounts)
+        if months_with_data == 0:
+            continue
+
+        min_amount = min(monthly_amounts)
+        max_amount = max(monthly_amounts)
+
+        # Find the peak month
+        peak_month = max(monthly.items(), key=lambda x: x[1])[0]
+
+        # Get IQR-adjusted average
+        avg_info = avg_by_id.get(cat_id)
+        avg_amount = avg_info["average_amount"] if avg_info else (
+            sum(monthly_amounts) // months_with_data
+        )
+
+        rows.append({
+            "category_name": cat["name"],
+            "group_name": cat.get("group_name", ""),
+            "avg_amount": avg_amount,
+            "min_amount": min_amount,
+            "max_amount": max_amount,
+            "peak_month": peak_month,
+            "months_with_data": months_with_data,
+        })
+
+    # Sort by avg_amount descending
+    rows.sort(key=lambda r: r["avg_amount"], reverse=True)
+
+    return {
+        "widget_type": "category_stats_table",
+        "title": title,
+        "period": period_label,
+        "rows": rows,
+    }
+
+
+async def _account_balances_list(
+    db: AsyncSession,
+    budget_id: str,
+    title: str,
+    included_account_ids: list[str] | None,
+) -> dict:
+    """Return list of accounts with current balances (YNAB + external)."""
+    # YNAB accounts
+    ynab_accounts = await _load_accounts(db, budget_id, included_account_ids)
+    ynab_sorted = sorted(ynab_accounts, key=lambda a: a.balance or 0, reverse=True)
+
+    accounts: list[dict] = []
+    total = 0
+
+    for a in ynab_sorted:
+        bal = a.balance or 0
+        accounts.append({
+            "name": a.name,
+            "type": a.type,
+            "balance": bal,
+            "source": "ynab",
+        })
+        total += bal
+
+    # External accounts
+    ext_accounts = await _load_external_accounts_with_balances(db)
+    ext_sorted = sorted(ext_accounts, key=lambda a: a["latest_balance"], reverse=True)
+
+    for ea in ext_sorted:
+        bal = ea["latest_balance"]
+        accounts.append({
+            "name": ea["name"],
+            "type": ea["account_type"],
+            "balance": bal,
+            "source": "external",
+        })
+        total += bal
+
+    return {
+        "widget_type": "account_balances_list",
+        "title": title,
+        "accounts": accounts,
+        "total": total,
+    }
+
+
+async def _recent_transactions(
+    db: AsyncSession,
+    budget_id: str,
+    title: str,
+    included_account_ids: list[str] | None,
+    limit: int,
+) -> dict:
+    """Return recent transactions as structured data."""
+    query = select(Transaction).where(
+        Transaction.budget_id == budget_id,
+        Transaction.deleted.is_(False),
+        Transaction.approved.is_(True),
+    )
+    if included_account_ids:
+        query = query.where(Transaction.account_id.in_(included_account_ids))
+    query = query.order_by(Transaction.date.desc()).limit(limit)
+
+    result = await db.execute(query)
+    txns = list(result.scalars().all())
+
+    # Load account names for display
+    account_names = await _load_account_name_map(db, budget_id)
+
+    transactions_list: list[dict] = []
+    for t in txns:
+        transactions_list.append({
+            "date": t.date,
+            "payee_name": t.payee_name or "",
+            "amount": t.amount,
+            "account_name": account_names.get(t.account_id, "Unknown"),
+        })
+
+    return {
+        "widget_type": "recent_transactions",
+        "title": title,
+        "transactions": transactions_list,
+    }
+
+
 # ---------------------------------------------------------------------------
 # Main dispatcher
 # ---------------------------------------------------------------------------
@@ -548,6 +1238,9 @@ async def get_widget_data(
     Chart widget response shape:
         {"widget_type", "title", "period", "plotly": <Plotly figure dict>}
 
+    Table/list widget response shape:
+        {"widget_type", "title", ...type-specific fields...}
+
     Error response shape:
         {"widget_type", "error": <message string>}
     """
@@ -567,7 +1260,7 @@ async def _get_widget_data_inner(
     db: AsyncSession,
     settings: AppSettings | None,
 ) -> dict:
-    """Inner implementation of get_widget_data — all exceptions propagate to caller."""
+    """Inner implementation of get_widget_data -- all exceptions propagate to caller."""
     config = _parse_config(widget)
     title = _widget_title(widget.widget_type, config)
 
@@ -579,12 +1272,32 @@ async def _get_widget_data_inner(
         }
     budget_id: str = settings.ynab_budget_id
 
+    # ── Widgets with special DB loading (no date-range transactions) ──────
+
     # net_worth_card does not use time-period transaction filtering
     if widget.widget_type == "net_worth_card":
         net_worth = await _load_net_worth(db, budget_id)
         return _net_worth_card(net_worth, title)
 
-    # Resolve date range from config
+    # account_balances_list uses its own queries
+    if widget.widget_type == "account_balances_list":
+        included_account_ids = _parse_account_ids(config)
+        return await _account_balances_list(db, budget_id, title, included_account_ids)
+
+    # recent_transactions uses a separate date-desc limited query
+    if widget.widget_type == "recent_transactions":
+        included_account_ids = _parse_account_ids(config)
+        raw_limit = config.get("limit", 20)
+        if not isinstance(raw_limit, int):
+            try:
+                raw_limit = int(raw_limit)
+            except (ValueError, TypeError):
+                raw_limit = 20
+        limit = max(5, min(100, raw_limit))
+        return await _recent_transactions(db, budget_id, title, included_account_ids, limit)
+
+    # ── Resolve date range from config ────────────────────────────────────
+
     time_period: str = config.get("time_period") or "last_12_months"
     try:
         start_date, end_date = _resolve_date_range(
@@ -602,34 +1315,28 @@ async def _get_widget_data_inner(
 
     period_label = _format_period_label(start_date, end_date)
 
-    # Account filter — only non-empty strings are valid YNAB account UUIDs
-    raw_account_ids = config.get("included_account_ids")
-    included_account_ids: list[str] | None = (
-        [str(x) for x in raw_account_ids if isinstance(x, str) and x]
-        if isinstance(raw_account_ids, list) and raw_account_ids
-        else None
-    )
+    # Account filter -- only non-empty strings are valid YNAB account UUIDs
+    included_account_ids = _parse_account_ids(config)
 
     # Load transactions for the resolved date range
     transactions = await _load_transactions(
         db, budget_id, start_date, end_date, included_account_ids
     )
 
-    # Card widgets — no categories needed
+    # ── Card widgets -- no categories needed ──────────────────────────────
+
     if widget.widget_type == "income_card":
         return _income_card(transactions, period_label, title)
     if widget.widget_type == "spending_card":
         return _spending_card(transactions, period_label, title)
     if widget.widget_type == "net_savings_card":
         return _net_savings_card(transactions, period_label, title)
+    if widget.widget_type == "savings_rate_card":
+        return _savings_rate_card(transactions, period_label, title)
 
-    # Chart widgets — need categories; only non-empty strings are valid category UUIDs
-    raw_cat_ids = config.get("excluded_category_ids")
-    excluded_category_ids: list[str] | None = (
-        [str(x) for x in raw_cat_ids if isinstance(x, str) and x]
-        if isinstance(raw_cat_ids, list) and raw_cat_ids
-        else None
-    )
+    # ── Chart/table widgets -- need categories ────────────────────────────
+
+    excluded_category_ids = _parse_excluded_category_ids(config)
     categories = await _load_categories(db, budget_id, excluded_category_ids)
 
     if widget.widget_type == "income_spending_trend":
@@ -640,8 +1347,36 @@ async def _get_widget_data_inner(
         return _category_breakdown(
             transactions, categories, start_date, end_date, period_label, title
         )
+    if widget.widget_type == "savings_rate_trend":
+        return _savings_rate_trend(
+            transactions, start_date, end_date, period_label, title
+        )
+    if widget.widget_type == "net_worth_trend":
+        snapshots = await _load_net_worth_snapshots(db, budget_id, start_date, end_date)
+        ext_balances = await _load_external_balances_in_range(db, end_date)
+        return _net_worth_trend(snapshots, ext_balances, period_label, title)
+    if widget.widget_type == "group_rollup":
+        chart_type = config.get("chart_type", "bar")
+        if chart_type not in ("bar", "donut"):
+            chart_type = "bar"
+        return _group_rollup(transactions, categories, period_label, title, chart_type)
+    if widget.widget_type == "payee_breakdown":
+        raw_top_n = config.get("top_n", 15)
+        if not isinstance(raw_top_n, int):
+            try:
+                raw_top_n = int(raw_top_n)
+            except (ValueError, TypeError):
+                raw_top_n = 15
+        top_n = max(1, min(30, raw_top_n))
+        return _payee_breakdown(transactions, period_label, title, top_n)
+    if widget.widget_type == "month_over_month":
+        return _month_over_month(
+            transactions, start_date, end_date, period_label, title
+        )
+    if widget.widget_type == "category_stats_table":
+        return _category_stats_table(transactions, categories, period_label, title)
 
-    # Unknown widget type — not yet implemented
+    # Unknown widget type -- not yet implemented
     logger.warning("Widget %d: unknown or unimplemented type: %s", widget.id, widget.widget_type)
     return {
         "widget_type": widget.widget_type,
