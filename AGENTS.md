@@ -8,7 +8,7 @@ This file is the authoritative reference for any AI agent working on this codeba
 
 **YNAB Financial Report** is a self-hosted Docker web application that:
 
-1. Connects to the [YNAB API](https://api.ynab.com/) to pull budget and transaction data
+1. Connects to the [YNAB API](https://api.ynab.com/) to pull budget and transaction data (see [`docs/ynab_api_reference.md`](docs/ynab_api_reference.md) for the complete endpoint and schema reference)
 2. Stores financial history in a local SQLite database
 3. Generates monthly reports with interactive charts and AI-written analysis
 4. Serves everything via a browser-accessible web dashboard
@@ -84,7 +84,7 @@ This app handles personal financial data. These requirements are mandatory:
 | PDF export | WeasyPrint | HTML-to-PDF conversion via CSS layout engine |
 | Scheduling | APScheduler | In-process async scheduler, integrates cleanly with FastAPI lifespan |
 | Email | aiosmtplib | Async SMTP; user-configured server, no hosted infrastructure |
-| YNAB sync | httpx (AsyncClient) | Direct YNAB v1 REST API; delta sync via `last_knowledge_of_server` |
+| YNAB sync | httpx (AsyncClient) | Direct YNAB v1 REST API; delta sync via `last_knowledge_of_server`. See `docs/ynab_api_reference.md` for the full API reference. |
 | Notion sync | httpx (AsyncClient) | Direct Notion REST API; optional feature |
 | Container | Docker + docker-compose | Portable, self-contained deployment |
 
@@ -165,7 +165,8 @@ YNAB-Financial-Report/
 ├── docs/
 │   ├── setup.md
 │   ├── configuration.md
-│   └── development.md
+│   ├── development.md
+│   └── ynab_api_reference.md ← Authoritative YNAB API reference (endpoints, schemas, enums, auth)
 ├── requirements.txt
 ├── app/
 │   ├── main.py                   # App factory, lifespan, routers, middleware, app.state.master_key
@@ -349,7 +350,7 @@ Outlier exclusions must be stored in `report_snapshots.outliers_excluded` (JSON 
 | 12.5 — Database Encryption | Complete | SQLCipher whole-database encryption (AES-256); one-time plaintext→encrypted migration; lazy DB init after unlock |
 | 13 — External Data Import | Complete | Upload PDF/CSV financial documents; AI normalizes to transaction records or balance snapshots; user reviews + corrects via chat; confirms before saving; external accounts and transactions included in AI report prompt |
 | 13.5 — Security Hardening | Complete | All critical/high/medium findings from the 2026-03-17 code audit addressed: vision AIProvider abstraction, TOCTOU lock, Pydantic row validation, get_running_loop fix, SSE error redaction, month validation, non-root Docker user, SQLCipher fail-fast, atomic recovery key write, boolean form parsing. |
-| 14 — Dashboard Redesign | In Progress — M5 complete, M6 next | Multi-dashboard builder: named dashboards, left dock, WYSIWYG gridstack.js editor, configurable column grid, per-widget filters (time period, accounts, categories), 17 widget types, per-dashboard + global custom CSS, net worth snapshots, projection widgets. Spec: docs/phase14_plan.md |
+| 14 — Dashboard Redesign | In Progress — M6 complete, M7 next | Multi-dashboard builder: named dashboards, left dock, WYSIWYG gridstack.js editor, configurable column grid, per-widget filters (time period, accounts, categories), 17 widget types, per-dashboard + global custom CSS, net worth snapshots, projection widgets. Spec: docs/phase14_plan.md |
 
 ---
 
@@ -464,7 +465,7 @@ A two-reviewer code audit (Codex, Claude) was completed on 2026-03-17. Findings 
 
 ## V2 Roadmap (Phases 12–14)
 
-Phases 12, 12.5, 13, and 13.5 are complete. Phase 14 (Dashboard Redesign) is in progress — Milestones 1–5 are complete, M6 (global CSS) is next. See the implementation status table and [`docs/phase14_plan.md`](docs/phase14_plan.md).
+Phases 12, 12.5, 13, and 13.5 are complete. Phase 14 (Dashboard Redesign) is in progress — Milestones 1–6 are complete, M7 (reports integration) is next. See the implementation status table and [`docs/phase14_plan.md`](docs/phase14_plan.md).
 
 ### Phase 12 — Life Context Chat ✓ Complete
 
@@ -579,7 +580,7 @@ See the Phase 13 section above for a full list of changed files.
 - `app/templates/settings/settings.html` — Appearance section (M6) + Financial Projections section (M5)
 - `app/routers/settings.py` — handle new AppSettings fields
 
-**Milestones:** M1 Foundation ✓ → M2 Builder (gridstack) ✓ → M3 Existing Widgets ✓ → M4 New Widgets ✓ → M5 Projections ✓ → M6 Global CSS → M7 Reports Integration (TBD)
+**Milestones:** M1 Foundation ✓ → M2 Builder (gridstack) ✓ → M3 Existing Widgets ✓ → M4 New Widgets ✓ → M5 Projections ✓ → M6 Global CSS ✓ → M7 Reports Integration (TBD)
 
 ### Milestone 3 — Widget Library: Existing Widgets ✓ Complete
 

@@ -8,6 +8,14 @@ Read `AGENTS.md` in full before making any changes. It is the authoritative spec
 
 ---
 
+## YNAB API Reference
+
+**For any question about YNAB API endpoints, request/response schemas, field names, enumerations, authentication, rate limits, or delta sync behaviour — consult [`docs/ynab_api_reference.md`](docs/ynab_api_reference.md) first.**
+
+This file is the single authoritative source for all YNAB API communication details. It was compiled from the downloaded OpenAPI spec (`docs/YNAB-api-1.json` / `docs/YNAB-api-1.yaml`) and the live API documentation. Do not guess at field names, enum values, or endpoint paths — look them up there.
+
+---
+
 ## Commands
 
 ### Run the app locally
@@ -108,7 +116,8 @@ No Alembic. `database.py` provides `create_all()` for new tables and `apply_migr
 
 - **Button labels use Title Case** on every page (e.g., "Save Settings", "Test Connection").
 - **Singleton tables** (`app_settings`) always use `id = 1`. Upsert on that ID; never insert a second row.
-- **YNAB entity deletes are soft** — set `deleted = True`, never hard-delete rows.
+- **YNAB entity deletes are soft** — set `deleted = True`, never hard-delete rows. (YNAB never hard-deletes; deleted entities only appear in delta requests.)
+- **YNAB API reference** — all endpoint paths, field names, enums, and schema details are in [`docs/ynab_api_reference.md`](docs/ynab_api_reference.md). Do not guess — look it up.
 - **`sync_log`** must always have a "running" row written at sync start and updated to "success" or "failed" at the end. No row may be left permanently in "running" state.
 - **`analysis_service.py` is pure** — no DB access, no HTTP calls. All inputs are plain Python objects. Keep it that way.
 - **Secrets are decrypted in the service layer**, not in routers. Routers pass opaque settings objects; services call `encryption.decrypt()` only when making an actual external call.
