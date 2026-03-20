@@ -155,6 +155,9 @@ async def apply_migrations() -> None:
         ("app_settings", "projection_expected_return_rate",      "REAL"),
         ("app_settings", "projection_retirement_target",         "INTEGER"),
     ]
+    # Block 1: ALTER TABLE column additions + DROP TABLE
+    # Uses try/except per statement — caught exceptions can deactivate the
+    # async connection, so this block must be separate from Block 2.
     async with engine.begin() as conn:
         for table, col, definition in _new_columns:
             try:
@@ -168,6 +171,9 @@ async def apply_migrations() -> None:
         except Exception:
             pass
 
+    # Block 2: CREATE TABLE IF NOT EXISTS + seeding (fresh connection so prior
+    # caught exceptions in Block 1 cannot contaminate this transaction).
+    async with engine.begin() as conn:
         # Phase 14: create dashboard tables if not yet present, then seed default
         await conn.execute(text("""
             CREATE TABLE IF NOT EXISTS dashboard (
