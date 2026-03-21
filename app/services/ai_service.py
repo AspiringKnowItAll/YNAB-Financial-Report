@@ -20,10 +20,15 @@ Protocol methods:
 
 import base64
 from collections.abc import AsyncIterator
-from typing import Protocol
+from typing import Protocol, TypedDict
 
 from app.models.settings import AppSettings
 from app.services.encryption import decrypt
+
+
+class ModelInfo(TypedDict):
+    id: str
+    vision: bool
 
 
 # ---------------------------------------------------------------------------
@@ -39,7 +44,7 @@ class AIProvider(Protocol):
         """Return True if the provider is reachable and the key is valid."""
         ...
 
-    async def list_models(self) -> list[str]:
+    async def list_models(self) -> list[ModelInfo]:
         """Return available model IDs sorted alphabetically."""
         ...
 
@@ -85,12 +90,13 @@ class AnthropicProvider:
         except Exception:
             return False
 
-    async def list_models(self) -> list[str]:
+    async def list_models(self) -> list[ModelInfo]:
         """Return available model IDs sorted alphabetically."""
         from anthropic import AsyncAnthropic
         client = AsyncAnthropic(api_key=self._api_key)
         models = await client.models.list(limit=100)
-        return sorted(m.id for m in models.data)
+        # All current Anthropic models support vision
+        return [{"id": m.id, "vision": True} for m in sorted(models.data, key=lambda m: m.id)]
 
     async def stream(self, system: str, user: str, max_tokens: int) -> AsyncIterator[str]:
         """Stream a completion token-by-token using Anthropic's streaming API."""
@@ -169,10 +175,20 @@ class OpenAIProvider:
         except Exception:
             return False
 
-    async def list_models(self) -> list[str]:
+    async def list_models(self) -> list[ModelInfo]:
         """Return available model IDs sorted alphabetically."""
         response = await self._client().models.list()
-        return sorted(m.id for m in response.data)
+        _VISION_SUBSTRINGS = (
+            "gpt-4o", "gpt-4-turbo", "gpt-4-vision",
+            "gemini", "claude-3", "claude-sonnet", "claude-opus", "claude-haiku",
+            "llava", "moondream", "gemma3", "minicpm-v", "bakllava",
+            "o1", "o3", "o4-mini",
+        )
+        ids = sorted(m.id for m in response.data)
+        return [
+            {"id": mid, "vision": any(s in mid for s in _VISION_SUBSTRINGS)}
+            for mid in ids
+        ]
 
     async def stream(self, system: str, user: str, max_tokens: int) -> AsyncIterator[str]:
         """Stream a completion token-by-token using the OpenAI streaming API."""

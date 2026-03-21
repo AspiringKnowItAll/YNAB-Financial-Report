@@ -8,6 +8,7 @@ duplicate detection, and persistence of confirmed import rows.
 
 from __future__ import annotations
 
+import io
 import json
 import logging
 import re
@@ -100,7 +101,7 @@ async def extract_text(file_bytes: bytes, filename: str) -> tuple[str, bool]:
         import pdfplumber
 
         text_parts: list[str] = []
-        with pdfplumber.open(stream=file_bytes) as pdf:
+        with pdfplumber.open(io.BytesIO(file_bytes)) as pdf:
             for page in pdf.pages:
                 page_text = page.extract_text()
                 if page_text:

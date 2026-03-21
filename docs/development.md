@@ -227,7 +227,7 @@ class MyNewProvider:
         # Make a minimal test call; return True if successful
         ...
 
-    async def list_models(self) -> list[str]:
+    async def list_models(self) -> list[ModelInfo]:
         # Return available model IDs sorted alphabetically
         ...
 

@@ -603,7 +603,7 @@
   function renderModelDropdown(filter, showAll) {
     var query = (!showAll && filter) ? filter.toLowerCase() : '';
     var matches = aiModels.filter(function(m) {
-      return !query || m.toLowerCase().indexOf(query) !== -1;
+      return !query || m.id.toLowerCase().indexOf(query) !== -1;
     });
     aiDropdown.innerHTML = '';
     highlightIdx = -1;
@@ -611,10 +611,19 @@
     matches.forEach(function(m) {
       var div = document.createElement('div');
       div.className = 'combobox-option';
-      div.textContent = m;
+      div.dataset.modelId = m.id;
+      var idSpan = document.createElement('span');
+      idSpan.textContent = m.id;
+      div.appendChild(idSpan);
+      if (m.vision) {
+        var badge = document.createElement('span');
+        badge.textContent = 'vision';
+        badge.style.cssText = 'font-size:.75em;background:var(--accent,#6c5ce7);color:#fff;padding:1px 6px;border-radius:4px;margin-left:8px;vertical-align:middle;';
+        div.appendChild(badge);
+      }
       div.addEventListener('mousedown', function(e) {
         e.preventDefault();  // Prevent blur from firing before click
-        aiInput.value = m;
+        aiInput.value = m.id;
         closeDropdown();
         aiInput.classList.remove('field-invalid');
       });
@@ -647,7 +656,7 @@
       highlightIdx = Math.max(highlightIdx - 1, 0);
     } else if (e.key === 'Enter' && highlightIdx >= 0) {
       e.preventDefault();
-      aiInput.value = items[highlightIdx].textContent;
+      aiInput.value = items[highlightIdx].dataset.modelId;
       closeDropdown();
       aiInput.classList.remove('field-invalid');
       return;

@@ -378,7 +378,7 @@ class AIProvider(Protocol):
     async def generate(self, system: str, user: str, max_tokens: int) -> str: ...
     async def stream(self, system: str, user: str, max_tokens: int) -> AsyncIterator[str]: ...
     async def health_check(self) -> bool: ...
-    async def list_models(self) -> list[str]: ...
+    async def list_models(self) -> list[ModelInfo]: ...
     async def vision(self, image_bytes: bytes, prompt: str) -> str: ...
 ```
 
@@ -475,7 +475,7 @@ These bugs and UX gaps were discovered during the first real end-to-end run of t
 - `app/templates_config.py` — Shared Jinja2Templates instance with `milliunit_to_dollars` filter and autoescape enabled. All routers must import from here.
 
 ### AI Provider Protocol Change
-- `list_models() -> list[str]` added to `AIProvider` protocol and both implementations (`AnthropicProvider`, `OpenAIProvider`). Returns available model IDs sorted alphabetically. Used by the settings page test button.
+- `list_models() -> list[ModelInfo]` added to `AIProvider` protocol and both implementations (`AnthropicProvider`, `OpenAIProvider`). Returns `{"id": str, "vision": bool}` dicts sorted by model ID. Used by the settings page test button to populate the model combobox with vision capability indicators.
 - `get_ai_provider_from_params(provider_name, api_key, base_url)` factory added to `ai_service.py`. Builds an `AIProvider` from plaintext form values without requiring a DB record or encryption. Used by `/api/test/ai`.
 
 ### Phase 12 Changes
@@ -517,7 +517,7 @@ None. All Phase 12 items are complete. Dashboard visual review is deferred to Ph
 
 ### Ollama Vision Detection
 
-Deferred to Phase 13. The `list_models()` return type change and `/api/show` capability detection will be implemented at the start of Phase 13 since that's when it's actually needed.
+`list_models()` now returns `list[ModelInfo]` (TypedDict with `id` and `vision` fields). The vision heuristic for `OpenAIProvider` (covering OpenAI, OpenRouter, Ollama) uses substring matching against known vision-capable model families: `gpt-4o`, `gpt-4-turbo`, `gpt-4-vision`, `gemini`, `claude-3`, `claude-sonnet`, `claude-opus`, `claude-haiku`, `llava`, `moondream`, `gemma3`, `minicpm-v`, `bakllava`, `o1`, `o3`, `o4-mini`. All Anthropic-native models are unconditionally marked `vision: True`. The settings combobox displays a "vision" badge for capable models.
 
 ---
 
