@@ -183,6 +183,8 @@ class OpenAIProvider:
             "gemini", "claude-3", "claude-sonnet", "claude-opus", "claude-haiku",
             "llava", "moondream", "gemma3", "minicpm-v", "bakllava",
             "o1", "o3", "o4-mini",
+            # Generic patterns that cover llama3.2-vision, qwen2.5vl, smolvlm, etc.
+            "vision", "vl",
         )
         ids = sorted(m.id for m in response.data)
         return [
