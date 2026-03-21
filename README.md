@@ -55,7 +55,7 @@ For a full walkthrough, see [docs/setup.md](docs/setup.md).
 | Report export | Download any report as PDF or self-contained HTML |
 | Email delivery | Sends reports via your own SMTP server — no third-party email infrastructure |
 | Notion sync | Optionally posts report summaries to a Notion database |
-| External data import | Upload bank/investment PDFs or CSVs; AI normalizes to structured data; user reviews before saving; included in AI reports |
+| External data import | Upload bank/investment PDFs or CSVs; multi-file persistent queue with real-time SSE progress (extract → vision → normalize); review and confirm per document; history section with delete-rows and account deactivate controls; included in AI reports |
 | Encrypted storage | Entire database encrypted with SQLCipher (AES-256); API keys also receive field-level Fernet encryption; master key derived via Argon2id |
 | Recovery codes | 8 single-use backup codes generated at setup — full access recovery if master password is lost |
 
@@ -114,6 +114,7 @@ See [AGENTS.md](AGENTS.md) for full security requirements applied to this codeba
 - [x] Life Context Chat — conversational AI financial life story with versioned context blocks
 - [x] External data import — upload bank/investment PDFs and CSVs; AI normalizes and extracts data; review and confirm before saving
 - [x] Security hardening — non-root Docker user, TOCTOU lock on recovery codes, Pydantic row validation, SSE error redaction, SQLCipher fail-fast, atomic file writes, strict month validation
+- [x] Import queue overhaul — persistent multi-file queue with SSE progress (extract → vision → normalize), stop/cancel controls, page-refresh persistence, history section with delete-rows and account management
 - [~] Dashboard redesign — multi-dashboard builder with gridstack.js drag/resize, 17 configurable widget types, per-widget filters, global + per-dashboard custom CSS *(in progress — M1–M6 complete; M7 reports integration next)*
 - [ ] Notion sync *(post-v1)*
 

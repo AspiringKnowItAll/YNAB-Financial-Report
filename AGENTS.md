@@ -217,6 +217,7 @@ YNAB-Financial-Report/
 │   ├── phase12_plan.md
 │   ├── phase13_plan.md
 │   ├── phase14_plan.md
+│   ├── phase15_plan.md
 │   ├── ynab_api_reference.md     ← Authoritative YNAB API reference (endpoints, schemas, enums, auth)
 │   ├── YNAB-api-1.json           ← Downloaded OpenAPI source
 │   └── YNAB-api-1.yaml           ← Downloaded OpenAPI source
@@ -250,7 +251,7 @@ YNAB-Financial-Report/
 │   │   ├── sync_service.py       # YNAB → SQLite pipeline
 │   │   ├── analysis_service.py   # Pure statistical functions
 │   │   ├── ai_service.py         # AIProvider protocol + all implementations (generate + stream)
-│   │   ├── import_service.py     # External data import extraction, review flow, persistence
+│   │   ├── import_service.py     # External data import: extraction, vision OCR, AI normalize, queue processing (SSE), persistence, history
 │   │   ├── life_context_service.py  # Life context chat: sessions, streaming, compression (Phase 12)
 │   │   ├── report_service.py     # Assembles report snapshots
 │   │   ├── widget_service.py     # Dashboard widget data dispatch; DB-only, no HTTP
@@ -264,7 +265,7 @@ YNAB-Financial-Report/
 │   │   ├── settings.py           # GET/POST /settings
 │   │   ├── reports.py            # GET /reports, /reports/{id}
 │   │   ├── life_context.py       # GET /profile; /api/chat/* endpoints (Phase 12)
-│   │   ├── import_data.py        # Import UI + upload/review/confirm endpoints
+│   │   ├── import_data.py        # Import UI + queue endpoints (upload, process SSE, sessions/active, history, cancel, confirm, delete rows, account toggle)
 │   │   ├── api.py                # POST /api/sync/trigger, /api/report/generate, /api/report/email/{id}, test endpoints
 │   │   └── export.py             # GET /export/{id}/pdf|html
 │   ├── templates/
@@ -292,7 +293,7 @@ YNAB-Financial-Report/
 - **Singleton tables** (`app_settings`) always use `id = 1`. Upsert on that ID; never insert a second row.
 - **Soft deletes via `deleted` flag** on YNAB entities (transactions, categories, accounts) — mirror YNAB's own deletion model. Never hard-delete YNAB data rows.
 - **`sync_log`** must always have a row written at the start of a sync (status = "running") and updated at the end (status = "success" or "failed"). Never leave a sync_log row in "running" state permanently.
-- **`ImportSession` lifecycle** must move out of `pending` into `confirmed` or `rejected`. Do not leave abandoned sessions permanently in `pending`.
+- **`ImportSession` lifecycle**: `pending` → `processing` (set atomically before AI work begins) → `reviewing` → `confirmed`. Terminal states: `cancelled`, `failed`. Never leave a session permanently in `pending` or `processing`; the queue restore endpoint maps `processing` back to `pending` to handle server-restart recovery.
 
 ---
 
@@ -534,8 +535,8 @@ The settings combobox displays a "vision" badge next to capable models.
 ### What Changed
 
 - **`app/models/import_data.py`** — New. Four ORM models: `InstitutionProfile`, `ImportSession`, `ExternalAccount`, `ExternalTransaction`, `ExternalBalance`. All monetary values stored as milliunits. Import session fields (`messages_enc`, `extracted_data_enc`, `file_content_enc`) use Fernet encryption as defense in depth.
-- **`app/services/import_service.py`** — New. Key functions: `extract_text()` (PDF via pdfplumber, CSV/TXT direct), `check_model_vision_capable()` (Ollama `/api/show` query; Anthropic/OpenAI assumed capable), `extract_via_vision()` (PDF→PNG→AI vision OCR via pymupdf), `normalize_with_ai()` (structured JSON via AI), `check_file_duplicate()`, `check_row_duplicates()`, `save_confirmed_import()`, `get_institution_profile()`, `save_institution_profile()`, `stream_import_chat()` (SSE streaming with `[DATA_UPDATE]` sentinel pattern).
-- **`app/routers/import_data.py`** — New. `GET /import`, `POST /api/import/upload`, `GET /api/import/session/{id}`, `POST /api/import/chat/{id}` (SSE), `POST /api/import/confirm/{id}`, `POST /api/import/cancel/{id}`, `DELETE /api/import/institution/{id}`.
+- **`app/services/import_service.py`** — New. Key functions: `extract_text()` (PDF via pdfplumber, CSV/TXT direct), `check_model_vision_capable()` (Ollama `/api/show` query; Anthropic/OpenAI assumed capable), `extract_via_vision()` (PDF→PNG→AI vision OCR via pymupdf), `normalize_with_ai()` (structured JSON via AI), `check_file_duplicate()`, `check_row_duplicates()`, `save_confirmed_import()`, `get_institution_profile()`, `save_institution_profile()`, `stream_import_chat()` (SSE streaming with `[DATA_UPDATE]` sentinel pattern). *(Phase 15 added: `process_session_sse()`, `list_active_sessions()`, `list_confirmed_sessions()`, `delete_import_session_rows()`.)*
+- **`app/routers/import_data.py`** — New. `GET /import`, `POST /api/import/upload`, `GET /api/import/session/{id}`, `POST /api/import/chat/{id}` (SSE), `POST /api/import/confirm/{id}`, `POST /api/import/cancel/{id}`, `DELETE /api/import/institution/{id}`. *(Phase 15 added: `GET /api/import/process/{id}` SSE, `GET /api/import/sessions/active`, `GET /api/import/history`, `DELETE /api/import/session/{id}/rows`, `PATCH /api/import/account/{id}`.)*
 - **`app/templates/import/import.html`** — New. Three-state UI (upload → review → confirmed). Drop zone, institution profile selector, extracted rows table, chat panel with `[DATA_UPDATE]` table refresh, confirm panel with account name/type and institution memory checkbox.
 - **`app/static/js/import.js`** — New. File drop zone, upload via `fetch()`+`FormData`, SSE chat handling, `[DATA_UPDATE]` table refresh, duplicate warning display.
 - **`app/services/report_service.py`** — Queries active `ExternalAccount` rows with latest `ExternalBalance` + `ExternalTransaction` rows for the report month; formats as structured text block injected into AI prompt via `_build_external_data_text()`.
