@@ -18,12 +18,18 @@ Protocol methods:
   vision(image_bytes, prompt)          → single-image OCR/vision (import_service)
 """
 
+import asyncio
 import base64
+import logging
 from collections.abc import AsyncIterator
 from typing import Protocol, TypedDict
 
+import httpx
+
 from app.models.settings import AppSettings
 from app.services.encryption import decrypt
+
+logger = logging.getLogger("app.ai_service")
 
 
 class ModelInfo(TypedDict):
@@ -144,10 +150,17 @@ class AnthropicProvider:
 # ---------------------------------------------------------------------------
 
 class OpenAIProvider:
-    def __init__(self, api_key: str, model: str, base_url: str | None = None) -> None:
+    def __init__(
+        self,
+        api_key: str,
+        model: str,
+        base_url: str | None = None,
+        provider_name: str = "openai",
+    ) -> None:
         self._api_key = api_key
         self._model = model
         self._base_url = base_url
+        self._provider_name = provider_name
 
     def _client(self):
         from openai import AsyncOpenAI
@@ -177,20 +190,77 @@ class OpenAIProvider:
 
     async def list_models(self) -> list[ModelInfo]:
         """Return available model IDs sorted alphabetically."""
+        if self._provider_name == "openrouter":
+            return await self._list_models_openrouter()
+        if self._provider_name == "ollama":
+            return await self._list_models_ollama()
+        # OpenAI: no capability metadata available, use name heuristics
         response = await self._client().models.list()
         _VISION_SUBSTRINGS = (
-            "gpt-4o", "gpt-4-turbo", "gpt-4-vision",
-            "gemini", "claude-3", "claude-sonnet", "claude-opus", "claude-haiku",
-            "llava", "moondream", "gemma3", "minicpm-v", "bakllava",
-            "o1", "o3", "o4-mini",
-            # Generic patterns that cover llama3.2-vision, qwen2.5vl, smolvlm, etc.
-            "vision", "vl",
+            "gpt-4o", "gpt-4-turbo", "gpt-4-vision", "o1", "o3", "o4-mini",
         )
         ids = sorted(m.id for m in response.data)
         return [
             {"id": mid, "vision": any(s in mid for s in _VISION_SUBSTRINGS)}
             for mid in ids
         ]
+
+    async def _list_models_openrouter(self) -> list[ModelInfo]:
+        """Fetch models from OpenRouter with architecture.modality metadata."""
+        base = (self._base_url or "https://openrouter.ai/api/v1").rstrip("/")
+        headers = {"Authorization": f"Bearer {self._api_key}"}
+        async with httpx.AsyncClient(timeout=15.0) as client:
+            resp = await client.get(f"{base}/models", headers=headers)
+            resp.raise_for_status()
+            data = resp.json()
+        result: list[ModelInfo] = []
+        for m in data.get("data", []):
+            model_id = m.get("id", "")
+            if not model_id:
+                continue
+            modality = m.get("architecture", {}).get("modality", "")
+            result.append({"id": model_id, "vision": "image" in modality})
+        return sorted(result, key=lambda x: x["id"])
+
+    async def _list_models_ollama(self) -> list[ModelInfo]:
+        """Fetch models from Ollama with per-model capability checks."""
+        # Derive the base Ollama host URL (strip /v1 suffix)
+        show_base = (self._base_url or "http://localhost:11434/v1").rstrip("/")
+        if show_base.endswith("/v1"):
+            show_base = show_base[:-3]
+
+        async with httpx.AsyncClient(timeout=15.0) as client:
+            # 1. Get full model list from native /api/tags endpoint
+            tags_resp = await client.get(f"{show_base}/api/tags")
+            tags_resp.raise_for_status()
+            models = tags_resp.json().get("models", [])
+
+            # 2. Query /api/show for each model in parallel (max 10 concurrent)
+            sem = asyncio.Semaphore(10)
+
+            async def get_vision(model_name: str) -> bool:
+                async with sem:
+                    try:
+                        r = await client.post(
+                            f"{show_base}/api/show",
+                            json={"name": model_name},
+                            timeout=5.0,
+                        )
+                        r.raise_for_status()
+                        return "vision" in r.json().get("capabilities", [])
+                    except Exception as exc:
+                        logger.debug("Ollama /api/show probe failed for %s: %s", model_name, exc)
+                        return False
+
+            names = [m.get("name") or m.get("model", "") for m in models]
+            names = [n for n in names if n]
+            vision_flags = await asyncio.gather(*[get_vision(n) for n in names])
+
+        result: list[ModelInfo] = [
+            {"id": name, "vision": bool(vis)}
+            for name, vis in zip(names, vision_flags)
+        ]
+        return sorted(result, key=lambda x: x["id"])
 
     async def stream(self, system: str, user: str, max_tokens: int) -> AsyncIterator[str]:
         """Stream a completion token-by-token using the OpenAI streaming API."""
@@ -259,6 +329,7 @@ def get_ai_provider_from_params(
             api_key=api_key,
             model=model,
             base_url=base_url if provider_name in ("openrouter", "ollama") else None,
+            provider_name=provider_name,
         )
 
     raise ValueError(f"Unknown AI provider: {provider_name!r}.")
@@ -313,7 +384,7 @@ def get_ai_provider(settings: AppSettings, master_key: bytes) -> AIProvider:
                 raise ValueError(f"{provider.capitalize()} base URL is not configured.")
             base_url = settings.ai_base_url
 
-        return OpenAIProvider(api_key=api_key, model=model, base_url=base_url)
+        return OpenAIProvider(api_key=api_key, model=model, base_url=base_url, provider_name=provider)
 
     raise ValueError(
         f"Unknown AI provider: {provider!r}. "
