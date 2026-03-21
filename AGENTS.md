@@ -515,9 +515,16 @@ None. All Phase 12 items are complete. Dashboard visual review is deferred to Ph
 - **`requirements.txt`** — Added `sqlcipher3-binary>=0.5.0`.
 - **`tests/unit/test_database_sqlcipher.py`** — New. 10 unit tests covering key storage, idempotent event registration, migration path (sentinel skip, fresh install, already-encrypted detection, plaintext→encrypted with data integrity, failure re-raise), and `_on_connect` PRAGMA behavior.
 
-### Ollama Vision Detection
+### Vision Capability Detection
 
-`list_models()` now returns `list[ModelInfo]` (TypedDict with `id` and `vision` fields). The vision heuristic for `OpenAIProvider` (covering OpenAI, OpenRouter, Ollama) uses substring matching against known vision-capable model families: `gpt-4o`, `gpt-4-turbo`, `gpt-4-vision`, `gemini`, `claude-3`, `claude-sonnet`, `claude-opus`, `claude-haiku`, `llava`, `moondream`, `gemma3`, `minicpm-v`, `bakllava`, `o1`, `o3`, `o4-mini`. All Anthropic-native models are unconditionally marked `vision: True`. The settings combobox displays a "vision" badge for capable models.
+`list_models()` returns `list[ModelInfo]` (TypedDict: `{"id": str, "vision": bool}`). Detection is provider-specific:
+
+- **Anthropic**: all models `vision=True` — all current Anthropic models support vision; no capability metadata in the API.
+- **OpenRouter**: `_list_models_openrouter()` calls `{base_url}/models` via httpx and reads `architecture.modality`; `"image"` in the modality string means vision-capable. This is authoritative metadata, not a heuristic.
+- **Ollama**: `_list_models_ollama()` calls native `/api/tags` to list models, then fires parallel `/api/show` requests (capped at 10 concurrent via `asyncio.Semaphore`) and checks the `capabilities` array for `"vision"`. This is the same authoritative check used by `check_model_vision_capable()`.
+- **OpenAI**: substring heuristic against OpenAI-specific names (`gpt-4o`, `gpt-4-turbo`, `gpt-4-vision`, `o1`, `o3`, `o4-mini`) — OpenAI provides no capability metadata in its models API.
+
+The settings combobox displays a "vision" badge next to capable models.
 
 ---
 
@@ -538,7 +545,7 @@ None. All Phase 12 items are complete. Dashboard visual review is deferred to Ph
 
 ### Known Issues / Limitations
 
-None. All planned milestones are complete. Dashboard visual integration with external accounts is deferred to Phase 14.
+**Post-completion bug fix (2026-03-21):** `extract_text()` called `pdfplumber.open(stream=file_bytes)` with raw `bytes`; pdfplumber requires a file-like object. Fixed by wrapping with `io.BytesIO(file_bytes)`. This caused all PDF uploads to fail immediately before the vision fallback was ever reached.
 
 A two-reviewer code audit (Codex, Claude) was completed on 2026-03-17. Findings are catalogued in `code-review-summary.md`. All critical, high, and medium findings are addressed in Phase 13.5. Low/informational findings are tracked in the Deferred Features section.
 
