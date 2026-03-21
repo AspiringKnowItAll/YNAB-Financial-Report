@@ -432,6 +432,7 @@ Outlier exclusions must be stored in `report_snapshots.outliers_excluded` (JSON 
 | 13 — External Data Import | Complete | Upload PDF/CSV financial documents; AI normalizes to transaction records or balance snapshots; user reviews + corrects via chat; confirms before saving; external accounts and transactions included in AI report prompt |
 | 13.5 — Security Hardening | Complete | All critical/high/medium findings from the 2026-03-17 code audit addressed: vision AIProvider abstraction, TOCTOU lock, Pydantic row validation, get_running_loop fix, SSE error redaction, month validation, non-root Docker user, SQLCipher fail-fast, atomic recovery key write, boolean form parsing. |
 | 14 — Dashboard Redesign | In Progress — M6 complete, M7 next | Multi-dashboard builder: named dashboards, left dock, WYSIWYG gridstack.js editor, configurable column grid, per-widget filters (time period, accounts, categories), 17 widget types, per-dashboard + global custom CSS, net worth snapshots, projection widgets. Spec: docs/phase14_plan.md |
+| 15 — Import Queue Overhaul | In Progress | Redesign import around a persistent server-side queue with SSE progress, multi-file upload, per-session review, stop/cancel controls, and a history & account management section. Spec: docs/phase15_plan.md |
 
 ---
 
@@ -715,6 +716,37 @@ See the Phase 13 section above for a full list of changed files.
 | `category_stats_table` | Table (HTML) | Per-category avg / min / max / peak month / months-with-data |
 | `account_balances_list` | List (HTML) | YNAB accounts + external accounts with current balances; grand total row |
 | `recent_transactions` | Table (HTML) | Most recent N transactions (date-desc); N configurable via `limit` (5–100) |
+
+---
+
+## Phase 15 — Import Queue Overhaul (In Progress)
+
+> **Full specification in [`docs/phase15_plan.md`](docs/phase15_plan.md).**
+
+**Goal:** Redesign the `/import` page around a persistent server-side queue. Upload stores the file immediately (no blocking AI call); processing happens separately via SSE with per-stage progress events. Multiple files can be queued and processed sequentially. A history section shows confirmed imports with per-session delete-rows and per-account deactivate controls.
+
+### New / Updated Endpoints
+
+| Method | Path | Change | Purpose |
+|---|---|---|---|
+| `POST` | `/api/import/upload` | Updated | File storage only; no AI; returns `{session_id}` immediately |
+| `GET` | `/api/import/process/{id}` | New | SSE stream: extract text + AI normalize, yield stage events |
+| `GET` | `/api/import/sessions/active` | New | Returns all `pending`+`reviewing`+`failed` sessions for queue restore |
+| `GET` | `/api/import/history` | New | Returns confirmed sessions + ExternalAccount list with row counts |
+| `DELETE` | `/api/import/session/{id}/rows` | New | Hard-deletes ExternalTransaction + ExternalBalance rows for that session |
+| `PATCH` | `/api/import/account/{id}` | New | Toggle `is_active` on ExternalAccount |
+| `POST` | `/api/import/cancel/{id}` | Unchanged | Cancel pending/processing session |
+
+### New Service Functions (`import_service.py`)
+
+- `process_session_sse(session_id, db, settings, master_key)` — async generator; yields JSON SSE progress events; does extraction + vision (per-page) + normalization; updates session to `"reviewing"` on success or `"failed"` on error
+- `list_active_sessions(db)` — returns pending/reviewing/failed sessions for queue restore
+- `list_confirmed_sessions(db, master_key)` — returns confirmed sessions with row counts and account info
+- `delete_import_session_rows(session_id, db)` — hard-deletes ExternalTransaction + ExternalBalance rows; preserves ImportSession as audit trail
+
+### No Schema Migrations
+
+Existing `ImportSession.status`, `ImportSession.file_content_enc`, and `ExternalAccount.is_active` columns are sufficient — no new columns or tables required.
 
 ---
 

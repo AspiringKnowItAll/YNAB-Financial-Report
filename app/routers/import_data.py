@@ -106,77 +106,12 @@ async def upload_file(
             "confirmed_at": dup_session.confirmed_at or dup_session.created_at,
         }
 
-    # --- 5. Load institution profile (optional) -------------------------
-    profile: InstitutionProfile | None = None
-    profile_id_stripped = institution_profile_id.strip()
-    if profile_id_stripped:
-        try:
-            pid = int(profile_id_stripped)
-        except ValueError:
-            return JSONResponse(
-                status_code=400,
-                content={"status": "error", "message": "Invalid institution profile ID."},
-            )
-        profile_result = await db.execute(
-            select(InstitutionProfile).where(InstitutionProfile.id == pid)
-        )
-        profile = profile_result.scalar_one_or_none()
-
-    # --- 6. Extract text ------------------------------------------------
-    try:
-        text, is_low_yield = await import_service.extract_text(
-            file_bytes, file.filename or "upload"
-        )
-    except ValueError as exc:
-        return JSONResponse(
-            status_code=400,
-            content={"status": "error", "message": str(exc)},
-        )
-    except Exception:
-        logger.exception("Text extraction failed")
-        return JSONResponse(
-            status_code=500,
-            content={"status": "error", "message": "Failed to extract text from file."},
-        )
-
-    # --- 7. Vision fallback --------------------------------------------
-    vision_needed = False
-    if is_low_yield:
-        try:
-            vision_capable = await import_service.check_model_vision_capable(
-                settings, master_key
-            )
-            if vision_capable:
-                text = await import_service.extract_via_vision(
-                    file_bytes, settings, master_key
-                )
-            else:
-                vision_needed = True
-        except Exception:
-            logger.exception("Vision extraction failed, using sparse text")
-            vision_needed = True
-
-    # --- 8. Normalize with AI ------------------------------------------
-    try:
-        normalization_result = await import_service.normalize_with_ai(
-            text, profile, settings, master_key
-        )
-    except Exception:
-        logger.exception("AI normalization failed")
-        return JSONResponse(
-            status_code=500,
-            content={"status": "error", "message": "AI normalization failed."},
-        )
-
-    # --- 9. Save ImportSession ------------------------------------------
+    # --- 5. Save ImportSession (pending — no AI processing) ---------------
     now_iso = datetime.now(timezone.utc).isoformat()
     session = ImportSession(
         file_name=file.filename or "upload",
         file_hash=file_hash,
-        status="reviewing",
-        data_type=normalization_result.get("data_type"),
-        institution_name=normalization_result.get("institution_name"),
-        extracted_data_enc=encrypt(json.dumps(normalization_result), master_key),
+        status="pending",
         file_content_enc=encrypt(
             base64.b64encode(file_bytes).decode(), master_key
         ),
@@ -186,15 +121,14 @@ async def upload_file(
     await db.commit()
     await db.refresh(session)
 
-    # --- 10. Return response -------------------------------------------
+    # --- 6. Return response immediately --------------------------------
     return JSONResponse(
         status_code=200,
         content={
             "status": "success",
             "session_id": session.id,
-            "normalization": normalization_result,
+            "file_name": session.file_name,
             "duplicate_file_warning": duplicate_file_warning,
-            "vision_needed": vision_needed,
         },
     )
 
@@ -405,6 +339,7 @@ async def confirm_import(
             "status": "success",
             "account_id": account.id,
             "message": f"Import confirmed. {row_count} rows saved.",
+            "return_to_queue": True,
         },
     )
 
@@ -443,14 +378,143 @@ async def cancel_import(
 
 
 # ---------------------------------------------------------------------------
+# GET /api/import/process/{session_id} — SSE processing stream
+# ---------------------------------------------------------------------------
+
+@router.get("/api/import/process/{session_id}")
+async def process_session(
+    request: Request,
+    session_id: int,
+    db: AsyncSession = Depends(get_db),
+) -> StreamingResponse:
+    master_key: bytes | None = request.app.state.master_key
+    if master_key is None:
+        raise HTTPException(status_code=503, detail="App is locked.")
+
+    settings_result = await db.execute(
+        select(AppSettings).where(AppSettings.id == 1)
+    )
+    settings = settings_result.scalar_one_or_none()
+    if settings is None or not settings.settings_complete:
+        raise HTTPException(status_code=503, detail="AI is not configured.")
+
+    return StreamingResponse(
+        import_service.process_session_sse(session_id, db, settings, master_key),
+        media_type="text/event-stream",
+        headers={"Cache-Control": "no-cache", "X-Accel-Buffering": "no"},
+    )
+
+
+# ---------------------------------------------------------------------------
+# GET /api/import/sessions/active — queue restore
+# ---------------------------------------------------------------------------
+
+@router.get("/api/import/sessions/active")
+async def get_active_sessions(
+    request: Request,
+    db: AsyncSession = Depends(get_db),
+) -> JSONResponse:
+    master_key: bytes | None = request.app.state.master_key
+    if master_key is None:
+        raise HTTPException(status_code=503, detail="App is locked.")
+
+    sessions = await import_service.list_active_sessions(db)
+    return JSONResponse({"status": "success", "sessions": sessions})
+
+
+# ---------------------------------------------------------------------------
+# GET /api/import/history — confirmed import history
+# ---------------------------------------------------------------------------
+
+@router.get("/api/import/history")
+async def get_history(
+    request: Request,
+    db: AsyncSession = Depends(get_db),
+) -> JSONResponse:
+    master_key: bytes | None = request.app.state.master_key
+    if master_key is None:
+        raise HTTPException(status_code=503, detail="App is locked.")
+
+    data = await import_service.list_confirmed_sessions(db)
+    return JSONResponse({"status": "success", **data})
+
+
+# ---------------------------------------------------------------------------
+# DELETE /api/import/session/{session_id}/rows — delete imported rows
+# ---------------------------------------------------------------------------
+
+@router.delete("/api/import/session/{session_id}/rows")
+async def delete_session_rows(
+    request: Request,
+    session_id: int,
+    db: AsyncSession = Depends(get_db),
+) -> JSONResponse:
+    master_key: bytes | None = request.app.state.master_key
+    if master_key is None:
+        raise HTTPException(status_code=503, detail="App is locked.")
+
+    # Verify session exists and is confirmed
+    result = await db.execute(
+        select(ImportSession).where(ImportSession.id == session_id)
+    )
+    session = result.scalar_one_or_none()
+    if session is None:
+        raise HTTPException(status_code=404, detail="Import session not found.")
+    if session.status != "confirmed":
+        return JSONResponse(
+            status_code=400,
+            content={"status": "error", "message": "Can only delete rows from confirmed sessions."},
+        )
+
+    delete_result = await import_service.delete_import_session_rows(session_id, db)
+    return JSONResponse({"status": "success", **delete_result})
+
+
+# ---------------------------------------------------------------------------
+# PATCH /api/import/account/{account_id} — toggle account active status
+# ---------------------------------------------------------------------------
+
+class AccountUpdateRequest(BaseModel):
+    is_active: bool
+
+
+@router.patch("/api/import/account/{account_id}")
+async def update_account(
+    request: Request,
+    account_id: int,
+    body: AccountUpdateRequest,
+    db: AsyncSession = Depends(get_db),
+) -> JSONResponse:
+    master_key: bytes | None = request.app.state.master_key
+    if master_key is None:
+        raise HTTPException(status_code=503, detail="App is locked.")
+
+    result = await db.execute(
+        select(ExternalAccount).where(ExternalAccount.id == account_id)
+    )
+    account = result.scalar_one_or_none()
+    if account is None:
+        raise HTTPException(status_code=404, detail="Account not found.")
+
+    account.is_active = body.is_active
+    await db.commit()
+    return JSONResponse({"status": "success", "is_active": account.is_active})
+
+
+# ---------------------------------------------------------------------------
 # DELETE /api/import/institution/{profile_id} — delete institution profile
 # ---------------------------------------------------------------------------
 
 @router.delete("/api/import/institution/{profile_id}")
 async def delete_institution_profile(
+    request: Request,
     profile_id: int,
     db: AsyncSession = Depends(get_db),
 ) -> JSONResponse:
+    master_key: bytes | None = request.app.state.master_key
+    if master_key is None:
+        raise HTTPException(status_code=503, detail="App is locked.")
+
     result = await db.execute(
         select(InstitutionProfile).where(InstitutionProfile.id == profile_id)
     )

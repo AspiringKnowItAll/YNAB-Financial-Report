@@ -35,7 +35,7 @@ class ImportSession(Base):
     (defense in depth on top of SQLCipher). file_content_enc is cleared
     (set to NULL) after the user confirms the import.
 
-    status values:    pending | reviewing | confirmed | cancelled | failed
+    status values:    pending | processing | reviewing | confirmed | cancelled | failed
     data_type values: transactions | balances | both | unknown
     """
 

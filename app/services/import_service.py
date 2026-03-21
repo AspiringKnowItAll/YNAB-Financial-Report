@@ -8,6 +8,7 @@ duplicate detection, and persistence of confirmed import rows.
 
 from __future__ import annotations
 
+import base64
 import io
 import json
 import logging
@@ -20,9 +21,10 @@ from typing import TYPE_CHECKING
 from pydantic import BaseModel, Field, field_validator
 
 import httpx
-from sqlalchemy import func, select
+from sqlalchemy import delete, func, select
 
 from app.models.import_data import (
+    ExternalAccount,
     ExternalBalance,
     ExternalTransaction,
     ImportSession,
@@ -641,3 +643,280 @@ async def stream_import_chat(
 
     # 9. Commit
     await db.commit()
+
+
+# ---------------------------------------------------------------------------
+# 11. process_session_sse — SSE progress stream for AI processing
+# ---------------------------------------------------------------------------
+
+async def process_session_sse(
+    session_id: int,
+    db: AsyncSession,
+    settings: AppSettings,
+    master_key: bytes,
+) -> AsyncIterator[str]:
+    """
+    Async generator that processes an ImportSession through extraction and
+    AI normalization, yielding SSE-formatted progress events at each stage.
+
+    Stages: extracting -> vision (per page, if needed) -> normalizing -> done
+    On error: yields an error event and sets session status to 'failed'.
+    """
+    # Load the session
+    result = await db.execute(
+        select(ImportSession).where(ImportSession.id == session_id)
+    )
+    session = result.scalar_one_or_none()
+
+    if session is None:
+        yield f'data: {json.dumps({"stage": "error", "message": "Session not found."})}\n\n'
+        return
+
+    if session.status not in ("pending", "processing"):
+        yield f'data: {json.dumps({"stage": "error", "message": "Session is not pending."})}\n\n'
+        return
+
+    # Atomically mark as "processing" to prevent duplicate processing on page refresh
+    session.status = "processing"
+    await db.commit()
+    await db.refresh(session)
+
+    try:
+        # Decrypt file content (base64-encoded inside Fernet layer)
+        if session.file_content_enc is None:
+            session.status = "failed"
+            await db.commit()
+            yield f'data: {json.dumps({"stage": "error", "message": "No file data found for this session."})}\n\n'
+            return
+        raw_b64 = decrypt(session.file_content_enc, master_key)
+        file_bytes = base64.b64decode(raw_b64)
+
+        # --- Stage: extracting ---
+        yield f'data: {json.dumps({"stage": "extracting"})}\n\n'
+
+        text, is_low_yield = await extract_text(
+            file_bytes, session.file_name
+        )
+
+        # --- Vision fallback for scanned PDFs ---
+        if is_low_yield and session.file_name.lower().endswith(".pdf"):
+            vision_capable = await check_model_vision_capable(settings, master_key)
+            if vision_capable:
+                import fitz  # pymupdf — local import, already a dependency
+
+                doc = fitz.open(stream=file_bytes, filetype="pdf")
+                try:
+                    total_pages = len(doc)
+                    provider = get_ai_provider(settings, master_key)
+                    vision_prompt = (
+                        "Extract all financial data from this document page "
+                        "as plain text. Include all transactions, amounts, "
+                        "dates, and account information."
+                    )
+                    page_results: list[str] = []
+                    for i, page in enumerate(doc):
+                        yield f'data: {json.dumps({"stage": "vision", "page": i + 1, "total": total_pages})}\n\n'
+                        pix = page.get_pixmap(dpi=150)
+                        png_bytes = pix.tobytes("png")
+                        page_text = await provider.vision(png_bytes, vision_prompt)
+                        page_results.append(page_text)
+                    text = "\n\n".join(page_results)
+                finally:
+                    doc.close()
+            # If not vision-capable, proceed with the sparse text as-is
+
+        # --- Stage: normalizing ---
+        yield f'data: {json.dumps({"stage": "normalizing"})}\n\n'
+
+        normalization_result = await normalize_with_ai(
+            text, None, settings, master_key
+        )
+
+        # Check if session was cancelled during AI processing
+        await db.refresh(session)
+        if session.status == "cancelled":
+            yield f'data: {json.dumps({"stage": "cancelled"})}\n\n'
+            return
+
+        # Save results to session
+        session.extracted_data_enc = encrypt(
+            json.dumps(normalization_result), master_key
+        )
+        session.status = "reviewing"
+        session.data_type = normalization_result.get("data_type")
+        session.institution_name = normalization_result.get("institution_name")
+        await db.commit()
+
+        # --- Stage: done ---
+        yield f'data: {json.dumps({"stage": "done", "normalization": normalization_result})}\n\n'
+
+    except Exception:
+        logger.exception(
+            "process_session_sse failed for session %d", session_id
+        )
+        try:
+            session.status = "failed"
+            await db.commit()
+        except Exception:
+            logger.exception("Failed to mark session %d as failed", session_id)
+        yield f'data: {json.dumps({"stage": "error", "message": "Processing failed. Check server logs."})}\n\n'
+
+
+# ---------------------------------------------------------------------------
+# 12. list_active_sessions — queue restore
+# ---------------------------------------------------------------------------
+
+async def list_active_sessions(db: AsyncSession) -> list[dict]:
+    """
+    Return all ImportSessions with status in ('pending', 'processing', 'reviewing', 'failed'),
+    ordered by creation time ascending. Used to restore the queue on page load.
+    'processing' sessions are mapped back to 'pending' so the client re-queues them
+    (handles server restart mid-processing).
+    """
+    stmt = (
+        select(ImportSession)
+        .where(ImportSession.status.in_(["pending", "processing", "reviewing", "failed"]))
+        .order_by(ImportSession.created_at.asc())
+    )
+    result = await db.execute(stmt)
+    sessions = result.scalars().all()
+
+    return [
+        {
+            "id": s.id,
+            "file_name": s.file_name,
+            "institution_name": s.institution_name,
+            "status": "pending" if s.status == "processing" else s.status,
+            "data_type": s.data_type,
+            "created_at": s.created_at,
+        }
+        for s in sessions
+    ]
+
+
+# ---------------------------------------------------------------------------
+# 13. list_confirmed_sessions — history view
+# ---------------------------------------------------------------------------
+
+async def list_confirmed_sessions(
+    db: AsyncSession,
+) -> dict:
+    """
+    Return confirmed ImportSessions (with row counts) and all ExternalAccounts.
+    Used by the history section on the import page.
+    """
+    # --- Confirmed sessions with row counts ---
+    stmt = (
+        select(ImportSession)
+        .where(ImportSession.status == "confirmed")
+        .order_by(ImportSession.confirmed_at.desc())
+    )
+    result = await db.execute(stmt)
+    confirmed_sessions = result.scalars().all()
+
+    sessions_list: list[dict] = []
+    for s in confirmed_sessions:
+        # Count transactions for this session
+        txn_result = await db.execute(
+            select(func.count())
+            .select_from(ExternalTransaction)
+            .where(ExternalTransaction.import_session_id == s.id)
+        )
+        txn_count = txn_result.scalar() or 0
+
+        # Count balances for this session
+        bal_result = await db.execute(
+            select(func.count())
+            .select_from(ExternalBalance)
+            .where(ExternalBalance.import_session_id == s.id)
+        )
+        bal_count = bal_result.scalar() or 0
+
+        sessions_list.append({
+            "id": s.id,
+            "file_name": s.file_name,
+            "institution_name": s.institution_name,
+            "confirmed_at": s.confirmed_at,
+            "transaction_count": txn_count,
+            "balance_count": bal_count,
+        })
+
+    # --- External accounts with row counts ---
+    acct_result = await db.execute(select(ExternalAccount))
+    accounts = acct_result.scalars().all()
+
+    accounts_list: list[dict] = []
+    for a in accounts:
+        txn_result = await db.execute(
+            select(func.count())
+            .select_from(ExternalTransaction)
+            .where(ExternalTransaction.external_account_id == a.id)
+        )
+        txn_count = txn_result.scalar() or 0
+
+        bal_result = await db.execute(
+            select(func.count())
+            .select_from(ExternalBalance)
+            .where(ExternalBalance.external_account_id == a.id)
+        )
+        bal_count = bal_result.scalar() or 0
+
+        accounts_list.append({
+            "id": a.id,
+            "name": a.name,
+            "account_type": a.account_type,
+            "institution": a.institution,
+            "is_active": a.is_active,
+            "transaction_count": txn_count,
+            "balance_count": bal_count,
+        })
+
+    return {"sessions": sessions_list, "accounts": accounts_list}
+
+
+# ---------------------------------------------------------------------------
+# 14. delete_import_session_rows — hard-delete rows for a confirmed session
+# ---------------------------------------------------------------------------
+
+async def delete_import_session_rows(
+    session_id: int, db: AsyncSession,
+) -> dict:
+    """
+    Hard-delete all ExternalTransaction and ExternalBalance rows associated
+    with the given import session. The ImportSession record itself is preserved
+    as an audit trail.
+
+    Returns counts of deleted transactions and balances.
+    """
+    # Count before deleting
+    txn_count_result = await db.execute(
+        select(func.count())
+        .select_from(ExternalTransaction)
+        .where(ExternalTransaction.import_session_id == session_id)
+    )
+    txn_count = txn_count_result.scalar() or 0
+
+    bal_count_result = await db.execute(
+        select(func.count())
+        .select_from(ExternalBalance)
+        .where(ExternalBalance.import_session_id == session_id)
+    )
+    bal_count = bal_count_result.scalar() or 0
+
+    # Hard-delete rows
+    await db.execute(
+        delete(ExternalTransaction).where(
+            ExternalTransaction.import_session_id == session_id
+        )
+    )
+    await db.execute(
+        delete(ExternalBalance).where(
+            ExternalBalance.import_session_id == session_id
+        )
+    )
+    await db.commit()
+
+    return {
+        "transactions_deleted": txn_count,
+        "balances_deleted": bal_count,
+    }
