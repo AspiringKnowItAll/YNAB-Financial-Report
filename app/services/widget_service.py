@@ -109,17 +109,13 @@ def _resolve_date_range(
         if s < floor:
             s = floor
         # The floor may have pushed s past e for ranges entirely in the past
-        # (e.g. 2021-01 to 2021-12 with a floor of 2024-03). Widen end to
-        # today so the clamped range is still valid rather than silently empty.
+        # (e.g. 2021-01 to 2021-12 with a floor of 2024-03). Raise so the
+        # caller returns an error state instead of showing wrong data.
         if s > e:
-            logger.warning(
-                "Custom date range %s–%s was entirely before the 24-month "
-                "floor (%s); widening end to today",
-                custom_start,
-                custom_end,
-                floor.isoformat(),
+            raise ValueError(
+                f"Custom date range {custom_start} to {custom_end} is "
+                f"entirely before the 24-month floor ({floor.isoformat()})"
             )
-            e = today
         return s.isoformat(), e.isoformat()
 
     if time_period == "all_time":
