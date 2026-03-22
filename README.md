@@ -115,7 +115,7 @@ See [AGENTS.md](AGENTS.md) for full security requirements applied to this codeba
 - [x] External data import — upload bank/investment PDFs and CSVs; AI normalizes and extracts data; review and confirm before saving
 - [x] Security hardening — non-root Docker user, TOCTOU lock on recovery codes, Pydantic row validation, SSE error redaction, SQLCipher fail-fast, atomic file writes, strict month validation
 - [x] Import queue overhaul — persistent multi-file queue with SSE progress (extract → vision → normalize), stop/cancel controls, page-refresh persistence, history section with delete-rows and account management
-- [~] Dashboard redesign — multi-dashboard builder with gridstack.js drag/resize, 17 configurable widget types, per-widget filters, global + per-dashboard custom CSS *(in progress — M1–M6 complete; M7 reports integration next)*
+- [x] Dashboard redesign — multi-dashboard builder with gridstack.js drag/resize, 17 configurable widget types, per-widget filters, global + per-dashboard custom CSS *(M1–M6 complete; M7 reports integration deferred)*
 - [ ] Notion sync *(post-v1)*
 
 ---
