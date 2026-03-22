@@ -21,7 +21,7 @@ from app.models.dashboard import Dashboard, DashboardWidget
 from app.models.import_data import ExternalAccount
 from app.models.report import SyncLog
 from app.models.settings import AppSettings
-from app.services.settings_service import get_global_custom_css
+from app.services.settings_service import get_global_custom_css, get_global_custom_css_from_settings
 from app.templates_config import templates
 
 logger = logging.getLogger(__name__)
@@ -203,14 +203,18 @@ async def dashboard_view(
     widgets = list(result.scalars().all())
 
     all_dashboards = await _get_all_dashboards(db)
-    global_custom_css = await get_global_custom_css(db, request.app.state.master_key)
 
-    # Fetch the most recent sync log entry scoped to the active budget
-    last_sync = None
+    # Single AppSettings fetch — used for both custom CSS and budget_id
     settings_result = await db.execute(
         select(AppSettings).where(AppSettings.id == 1)
     )
     app_settings = settings_result.scalar_one_or_none()
+    global_custom_css = get_global_custom_css_from_settings(
+        app_settings, request.app.state.master_key
+    )
+
+    # Fetch the most recent sync log entry scoped to the active budget
+    last_sync = None
     if app_settings and app_settings.ynab_budget_id:
         sync_result = await db.execute(
             select(SyncLog)

@@ -32,6 +32,21 @@ async def get_global_custom_css(
     """
     result = await db.execute(select(AppSettings).where(AppSettings.id == 1))
     settings = result.scalar_one_or_none()
+    return get_global_custom_css_from_settings(settings, master_key)
+
+
+def get_global_custom_css_from_settings(
+    settings: AppSettings | None, master_key: bytes | None
+) -> str | None:
+    """Decrypt global custom CSS from a pre-loaded AppSettings object.
+
+    Use this instead of :func:`get_global_custom_css` when the caller
+    already has the ``AppSettings`` row, to avoid a redundant DB query.
+
+    Returns:
+        The decrypted CSS string, or ``None`` if not configured / not
+        decryptable.
+    """
     if settings and settings.custom_css_enc and master_key:
         try:
             return decrypt(settings.custom_css_enc, master_key)

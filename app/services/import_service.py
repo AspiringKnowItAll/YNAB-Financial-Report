@@ -376,12 +376,14 @@ async def check_row_duplicates(
         for existing_txn in existing:
             if existing_txn.description == row_desc:
                 row["duplicate"] = "exact"
+                row.pop("existing_description", None)
                 break
-            else:
+            elif "duplicate" not in row:
+                # Keep the first near-match (most relevant) and stop
+                # looking for more near-matches.  An exact match later
+                # in the loop would still override via the branch above.
                 row["duplicate"] = "near"
                 row["existing_description"] = existing_txn.description
-                # Don't break — an exact match would override a near match
-        # If we found an exact match, it was set via break above
 
     return rows
 

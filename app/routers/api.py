@@ -267,6 +267,8 @@ async def test_smtp(request: Request, db: AsyncSession = Depends(get_db)):
     before saving settings. Falls back to saved values for any field
     left blank.
     """
+    from app.services.email_service import test_smtp_connection_from_params
+
     form = await request.form()
     settings = await _get_settings(db)
     master_key = request.app.state.master_key
@@ -296,28 +298,19 @@ async def test_smtp(request: Request, db: AsyncSession = Depends(get_db)):
         )
 
     try:
-        import aiosmtplib
-        # Port 465 = implicit TLS; port 587 (or other) = STARTTLS when TLS enabled.
-        use_implicit_tls = smtp_use_tls and smtp_port == 465
-
-        smtp = aiosmtplib.SMTP(
-            hostname=smtp_host,
-            port=smtp_port,
-            use_tls=use_implicit_tls,
+        await test_smtp_connection_from_params(
+            smtp_host=smtp_host,
+            smtp_port=smtp_port,
+            smtp_username=smtp_username,
+            smtp_password=smtp_password,
+            smtp_use_tls=smtp_use_tls,
         )
-        await smtp.connect()
-        try:
-            if smtp_use_tls and not use_implicit_tls:
-                await smtp.starttls()
-            if smtp_username:
-                await smtp.login(smtp_username, smtp_password or "")
-        finally:
-            await smtp.quit()
-
         return JSONResponse({
             "status": "success",
             "message": f"Connected to {smtp_host}:{smtp_port} successfully.",
         })
+    except RuntimeError as exc:
+        return JSONResponse({"status": "error", "message": str(exc)}, status_code=400)
     except Exception as exc:
         logger.error("SMTP connection test failed: %s", exc, exc_info=True)
         return JSONResponse(
@@ -338,8 +331,7 @@ async def test_smtp_send(request: Request, db: AsyncSession = Depends(get_db)):
     Accepts SMTP fields directly from the form so the user can test before
     saving. Falls back to saved values for any field left blank.
     """
-    from email.mime.text import MIMEText
-    import aiosmtplib
+    from app.services.email_service import test_smtp_send_from_params
 
     form = await request.form()
     settings = await _get_settings(db)
@@ -361,54 +353,22 @@ async def test_smtp_send(request: Request, db: AsyncSession = Depends(get_db)):
         except ValueError as exc:
             return JSONResponse({"status": "error", "message": str(exc)}, status_code=400)
 
-    missing = []
-    if not smtp_host:
-        missing.append("SMTP host")
-    if not smtp_from_email:
-        missing.append("From address")
-    if not report_to_email:
-        missing.append("Send reports to")
-    if missing:
-        return JSONResponse(
-            {"status": "error", "message": f"Configure these fields first: {', '.join(missing)}."},
-            status_code=400,
-        )
-
     try:
-        msg = MIMEText(
-            "This is a test email from YNAB Financial Report.\n\n"
-            "If you received this, your SMTP settings are configured correctly.",
-            "plain",
-            "utf-8",
+        recipients = await test_smtp_send_from_params(
+            smtp_host=smtp_host,
+            smtp_port=smtp_port,
+            smtp_username=smtp_username,
+            smtp_password=smtp_password,
+            smtp_use_tls=smtp_use_tls,
+            smtp_from_email=smtp_from_email,
+            report_to_email=report_to_email,
         )
-        # report_to_email may be comma-separated; build explicit recipient list.
-        recipients = [a.strip() for a in (report_to_email or "").split(",") if a.strip()]
-
-        msg["Subject"] = "YNAB Financial Report — SMTP test"
-        msg["From"] = smtp_from_email
-        msg["To"] = ", ".join(recipients)
-
-        use_implicit_tls = smtp_use_tls and smtp_port == 465
-
-        smtp = aiosmtplib.SMTP(
-            hostname=smtp_host,
-            port=smtp_port,
-            use_tls=use_implicit_tls,
-        )
-        await smtp.connect()
-        try:
-            if smtp_use_tls and not use_implicit_tls:
-                await smtp.starttls()
-            if smtp_username:
-                await smtp.login(smtp_username, smtp_password or "")
-            await smtp.send_message(msg, recipients=recipients)
-        finally:
-            await smtp.quit()
-
         return JSONResponse({
             "status": "success",
             "message": f"Test email sent to {', '.join(recipients)}.",
         })
+    except RuntimeError as exc:
+        return JSONResponse({"status": "error", "message": str(exc)}, status_code=400)
     except Exception as exc:
         logger.error("SMTP test send failed: %s", exc, exc_info=True)
         return JSONResponse(

@@ -201,19 +201,113 @@ async def test_smtp_connection(settings: AppSettings, master_key: bytes) -> None
     if settings.smtp_password_enc:
         smtp_password = decrypt(settings.smtp_password_enc, master_key)
 
+    await test_smtp_connection_from_params(
+        smtp_host=settings.smtp_host,
+        smtp_port=settings.smtp_port,
+        smtp_username=settings.smtp_username,
+        smtp_password=smtp_password,
+        smtp_use_tls=settings.smtp_use_tls,
+    )
+
+
+async def test_smtp_connection_from_params(
+    *,
+    smtp_host: str | None,
+    smtp_port: int | None,
+    smtp_username: str | None,
+    smtp_password: str | None,
+    smtp_use_tls: bool | None,
+) -> None:
+    """
+    Verify SMTP connectivity using raw parameters (for testing before save).
+
+    Raises:
+        RuntimeError: If smtp_host is missing.
+        aiosmtplib.SMTPException: On connection or authentication failure.
+    """
+    if not smtp_host:
+        raise RuntimeError("SMTP host is required.")
+
+    port = smtp_port or 587
+    use_tls = smtp_use_tls if smtp_use_tls is not None else True
+
     # Port 465 = implicit TLS; port 587 (or other) = STARTTLS when TLS enabled.
-    use_implicit_tls = settings.smtp_use_tls and settings.smtp_port == 465
+    use_implicit_tls = use_tls and port == 465
 
     smtp = aiosmtplib.SMTP(
-        hostname=settings.smtp_host,
-        port=settings.smtp_port,
+        hostname=smtp_host,
+        port=port,
         use_tls=use_implicit_tls,
     )
     await smtp.connect()
     try:
-        if settings.smtp_use_tls and not use_implicit_tls:
+        if use_tls and not use_implicit_tls:
             await smtp.starttls()
-        if settings.smtp_username:
-            await smtp.login(settings.smtp_username, smtp_password or "")
+        if smtp_username:
+            await smtp.login(smtp_username, smtp_password or "")
     finally:
         await smtp.quit()
+
+
+async def test_smtp_send_from_params(
+    *,
+    smtp_host: str | None,
+    smtp_port: int | None,
+    smtp_username: str | None,
+    smtp_password: str | None,
+    smtp_use_tls: bool | None,
+    smtp_from_email: str | None,
+    report_to_email: str | None,
+) -> list[str]:
+    """
+    Send a test email using raw SMTP parameters (for testing before save).
+
+    Returns the list of recipient addresses the message was sent to.
+
+    Raises:
+        RuntimeError: If required fields are missing.
+        aiosmtplib.SMTPException: On SMTP connection or delivery failure.
+    """
+    missing: list[str] = []
+    if not smtp_host:
+        missing.append("SMTP host")
+    if not smtp_from_email:
+        missing.append("From address")
+    if not report_to_email:
+        missing.append("Send reports to")
+    if missing:
+        raise RuntimeError(f"Configure these fields first: {', '.join(missing)}.")
+
+    port = smtp_port or 587
+    use_tls = smtp_use_tls if smtp_use_tls is not None else True
+
+    msg = MIMEText(
+        "This is a test email from YNAB Financial Report.\n\n"
+        "If you received this, your SMTP settings are configured correctly.",
+        "plain",
+        "utf-8",
+    )
+    recipients = [a.strip() for a in (report_to_email or "").split(",") if a.strip()]
+
+    msg["Subject"] = "YNAB Financial Report \u2014 SMTP test"
+    msg["From"] = smtp_from_email or ""
+    msg["To"] = ", ".join(recipients)
+
+    use_implicit_tls = use_tls and port == 465
+
+    smtp = aiosmtplib.SMTP(
+        hostname=smtp_host,
+        port=port,
+        use_tls=use_implicit_tls,
+    )
+    await smtp.connect()
+    try:
+        if use_tls and not use_implicit_tls:
+            await smtp.starttls()
+        if smtp_username:
+            await smtp.login(smtp_username, smtp_password or "")
+        await smtp.send_message(msg, recipients=recipients)
+    finally:
+        await smtp.quit()
+
+    return recipients

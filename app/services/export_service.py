@@ -33,7 +33,9 @@ _jinja_env = Environment(
 
 
 def _milliunit_to_dollars(value: int) -> str:
-    return f"${value / 1000:,.2f}"
+    dollars = abs(value) / 1000
+    formatted = f"${dollars:,.2f}"
+    return f"-{formatted}" if value < 0 else formatted
 
 
 def _format_dollars(value: float) -> str:

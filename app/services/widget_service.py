@@ -67,6 +67,16 @@ _COLOR_PALETTE: list[str] = [
 # Time period helpers
 # ---------------------------------------------------------------------------
 
+def _24_month_floor(ref: date) -> date:
+    """Return the first day of the month 24 months before *ref*."""
+    month = ref.month - 24
+    year = ref.year
+    while month <= 0:
+        month += 12
+        year -= 1
+    return date(year, month, 1)
+
+
 def _resolve_date_range(
     time_period: str,
     custom_start: str | None = None,
@@ -94,10 +104,29 @@ def _resolve_date_range(
             ) from exc
         if s > e:
             raise ValueError("custom_start_date must not be after custom_end_date")
+        # Enforce the same 24-month cap on custom ranges
+        floor = _24_month_floor(today)
+        if s < floor:
+            s = floor
+        # The floor may have pushed s past e for ranges entirely in the past
+        # (e.g. 2021-01 to 2021-12 with a floor of 2024-03). Widen end to
+        # today so the clamped range is still valid rather than silently empty.
+        if s > e:
+            logger.warning(
+                "Custom date range %s–%s was entirely before the 24-month "
+                "floor (%s); widening end to today",
+                custom_start,
+                custom_end,
+                floor.isoformat(),
+            )
+            e = today
         return s.isoformat(), e.isoformat()
 
     if time_period == "all_time":
-        return "2000-01-01", today.isoformat()
+        # Cap at 24 months — the chart window never exceeds this, and loading
+        # unbounded transaction history would degrade over time.
+        floor = _24_month_floor(today)
+        return floor.isoformat(), today.isoformat()
 
     # ytd ends at the last day of the previous complete month.
     # Exception: in January no complete month exists yet, so it falls back to

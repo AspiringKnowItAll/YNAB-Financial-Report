@@ -766,20 +766,23 @@ These are correctness, performance, and hygiene items that carry no architectura
 
 - **N+1 query optimization** — `check_row_duplicates` in `import_service.py` issues one DB query per row; `generate_report` in `report_service.py` issues one query per external account for latest balance. Batch-load instead. (`code-review-summary.md` HIGH-2/LOW N+1)
 - **`[DATA_UPDATE]` prompt injection sentinel** — Replace bracket-form `[DATA_UPDATE]...[/DATA_UPDATE]` with null-byte or GUID-based delimiter to prevent crafted document content from triggering the data-update parser. (`code-review-summary.md` MED-5)
-- **`Content-Disposition` filename sanitization** — Use `urllib.parse.quote()` on all `Content-Disposition` filename parameters in `export.py` and `import_data.py`. (`code-review-summary.md` MED-6)
 - **Auth gate DB query caching** — Once the app is unlocked and settings are confirmed, cache `settings_complete` in `app.state` to avoid a DB round-trip on every request. (`code-review-summary.md` LOW-8)
 - **Pin dependency versions** — Generate a `requirements-frozen.txt` with exact pins for reproducible Docker production builds. (`code-review-summary.md` LOW-5)
-- **SMTP logic deduplication** — The `/api/test/smtp` and `/api/test/smtp/send` handlers in `api.py` duplicate the TLS detection and connection logic from `email_service.test_smtp_connection`. Refactor the handlers to delegate to the service. (`code-review-summary.md` LOW-3)
-- **`milliunit_to_dollars` sign placement** — Negative values render as `$-1,234.56` instead of `-$1,234.56`. Fix in `templates_config.py`. (`code-review-summary.md` LOW-10)
-- **Dashboard transaction memory bound** — `dashboard.py` loads all non-deleted transactions with no `LIMIT`. Cap at last 24 months to match the chart window. (`code-review-summary.md` LOW-7)
-- **`check_row_duplicates` near-match bug** — Near-match description is overwritten by each successive candidate; the last one wins rather than the most relevant. Fix inner-loop exit logic. (`code-review-summary.md` LOW-4)
-- **MIME magic-byte validation** — Supplement client-reported `content_type` check in the upload handler with a magic-byte prefix check (`%PDF-` for PDFs; UTF-8 decode attempt for CSV/TXT). (`code-review-summary.md` MED-7)
-- **`apply_migrations` comment** — Add a code comment in `database.py` stating that all values in `_new_columns` must be hardcoded string literals — never runtime variables — to prevent a future SQL injection surface. (`code-review-summary.md` HIGH-4 note)
-- **~~Missing sync button on main dashboard~~** — Fixed: sync status bar (with Import + Sync Now buttons) ported to `dashboard_view.html`; `dashboards.py` route passes `last_sync` scoped by active budget.
-- **~~Inconsistent nav bar across pages~~** — Fixed: canonical 5-link nav extracted to `app/templates/partials/nav.html`; all authenticated templates include it; `base.html` default is empty (auth pages remain nav-free); each router passes `current_page` for active-state highlighting.
-- **Double `AppSettings` fetch on dashboard view** — `dashboard_view` route fetches `AppSettings(id=1)` twice: once in `get_global_custom_css()` and again for `ynab_budget_id`. Consolidate to a single query.
-- **`nav.html` missing `aria-current="page"`** — Active nav link uses only an inline color style. Add `aria-current="page"` attribute for accessibility.
+- **`_milliunit_to_dollars` duplication** — Three identical copies exist in `templates_config.py`, `export_service.py`, and `report_service.py`. Consider extracting to a shared utility to eliminate drift risk. Sign formatting is now consistent across all three.
+- **`check_row_duplicates` UTF-8 validation scope** — Magic-byte upload check validates only the first 512 bytes; `extract_text()` uses `errors="replace"` on the full payload. Validate the full file or document as a heuristic.
+- **`Content-Disposition` RFC 6266 fallback** — `export.py` uses `filename*=UTF-8''...` without a legacy `filename=` fallback. In practice `snapshot.month` is always a safe `YYYY-MM` string, making this theoretical.
 - **Repo-wide `mypy` errors** — `mypy app` reports pre-existing errors (sqlcipher3 stub, bleach/markdown/weasyprint stubs, api_dashboards grid attrs, ai_service union-attr). These pre-date Phase 14 but should be addressed in a hardening pass.
+- **~~Missing sync button on main dashboard~~** — Fixed.
+- **~~Inconsistent nav bar across pages~~** — Fixed.
+- **~~`milliunit_to_dollars` sign placement~~** — Fixed in `templates_config.py`, `export_service.py`, and `report_service.py`. Negatives now render as `-$1,234.56`.
+- **~~Dashboard transaction memory bound~~** — Fixed: widget queries capped at 24 months; `all_time` period now floors at 24 months.
+- **~~`check_row_duplicates` near-match bug~~** — Fixed: first near-match is kept; loop exits early on exact match.
+- **~~MIME magic-byte validation~~** — Fixed: `%PDF` prefix check for PDFs; UTF-8 decode check for CSV/TXT in upload handler.
+- **~~`apply_migrations` comment~~** — Fixed: security comment added to `_new_columns` in `database.py`.
+- **~~`Content-Disposition` filename sanitization~~** — Fixed: `urllib.parse.quote()` with RFC 5987 `filename*=` in `export.py`.
+- **~~SMTP logic deduplication~~** — Fixed: `/api/test/smtp` and `/api/test/smtp/send` delegate to `email_service.test_smtp_connection_from_params()` and `email_service.test_smtp_send_from_params()`.
+- **~~Double `AppSettings` fetch on dashboard view~~** — Fixed: single query in `dashboard_view`; `get_global_custom_css_from_settings()` helper added to `settings_service.py`.
+- **~~`nav.html` missing `aria-current="page"`~~** — Fixed.
 
 ---
 

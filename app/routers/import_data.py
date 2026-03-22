@@ -85,6 +85,29 @@ async def upload_file(
 
     # --- 2. Read bytes and validate size --------------------------------
     file_bytes = await file.read()
+
+    # --- 2a. Magic-byte validation — verify content matches claimed type ---
+    if file.content_type == "application/pdf":
+        if not file_bytes[:4] == b"%PDF":
+            return JSONResponse(
+                status_code=400,
+                content={
+                    "status": "error",
+                    "message": "File does not appear to be a valid PDF.",
+                },
+            )
+    elif file.content_type in ("text/csv", "text/plain"):
+        try:
+            file_bytes[:512].decode("utf-8")
+        except UnicodeDecodeError:
+            return JSONResponse(
+                status_code=400,
+                content={
+                    "status": "error",
+                    "message": "File does not appear to be valid UTF-8 text.",
+                },
+            )
+
     if len(file_bytes) > _MAX_FILE_BYTES:
         return JSONResponse(
             status_code=400,

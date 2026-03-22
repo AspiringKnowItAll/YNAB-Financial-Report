@@ -140,6 +140,10 @@ async def apply_migrations() -> None:
 
     Also performs one-time table mutations (drop user_profile — Phase 12).
     """
+    # SECURITY: All default values below must be hardcoded string literals —
+    # never runtime variables — to prevent SQL injection.  The ALTER TABLE
+    # statements are built by string interpolation, so any dynamic content in
+    # the definition column would be an injection vector.
     _new_columns = [
         ("app_settings", "schedule_enabled",             "BOOLEAN NOT NULL DEFAULT 0"),
         ("app_settings", "schedule_frequency",           "VARCHAR(16)"),

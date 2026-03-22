@@ -51,7 +51,9 @@ def _milliunit_to_float(milliunits: int) -> float:
 
 
 def _milliunit_to_dollars(milliunits: int) -> str:
-    return f"${milliunits / 1000:,.2f}"
+    dollars = abs(milliunits) / 1000
+    formatted = f"${dollars:,.2f}"
+    return f"-{formatted}" if milliunits < 0 else formatted
 
 
 def _last_n_months(anchor: str, n: int) -> list[str]:

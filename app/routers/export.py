@@ -5,6 +5,8 @@ GET /export/{id}/html   → Standalone interactive HTML file download
 GET /export/{id}/pdf    → PDF file download via WeasyPrint
 """
 
+from urllib.parse import quote
+
 from fastapi import APIRouter, Depends, HTTPException
 from fastapi.responses import HTMLResponse, Response
 from sqlalchemy import select
@@ -43,9 +45,10 @@ async def export_html(report_id: int, db: AsyncSession = Depends(get_db)):
     snapshot, budget_name = await _get_snapshot_and_budget(report_id, db)
     html = await render_html(snapshot, budget_name)
     filename = f"report-{snapshot.month}.html"
+    safe_filename = quote(filename, safe="")
     return HTMLResponse(
         content=html,
-        headers={"Content-Disposition": f'attachment; filename="{filename}"'},
+        headers={"Content-Disposition": f"attachment; filename*=UTF-8''{safe_filename}"},
     )
 
 
@@ -55,8 +58,9 @@ async def export_pdf(report_id: int, db: AsyncSession = Depends(get_db)):
     snapshot, budget_name = await _get_snapshot_and_budget(report_id, db)
     pdf_bytes = await render_pdf(snapshot, budget_name)
     filename = f"report-{snapshot.month}.pdf"
+    safe_filename = quote(filename, safe="")
     return Response(
         content=pdf_bytes,
         media_type="application/pdf",
-        headers={"Content-Disposition": f'attachment; filename="{filename}"'},
+        headers={"Content-Disposition": f"attachment; filename*=UTF-8''{safe_filename}"},
     )
